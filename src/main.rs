@@ -2,7 +2,29 @@ use std::{collections::HashSet, fs::File, io::BufReader, usize};
 use itertools::Itertools;
 use std::cmp;
 
+use std::{
+    env,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
+use songbird::{
+    input::{
+        self,
+        restartable::Restartable,
+    },
+    Event,
+    EventContext,
+    EventHandler as VoiceEventHandler,
+    SerenityInit,
+    TrackEvent,
+    Call,
+};
+
+use serenity::http::Http;
 use serenity::async_trait;
 use serenity::builder::CreateEmbedAuthor;
 use serenity::framework::standard::{
@@ -22,8 +44,6 @@ use serde_json::Result;
 
 use rand::seq::SliceRandom;
 use rand::Rng;
-
-use std::time::Duration;
 
 struct Handler;
 
@@ -119,6 +139,12 @@ struct Game;
 #[summary("ソルバー")]
 #[commands(solve_hutougou)]
 struct Puzzle;
+
+#[group]
+#[description("音声")]
+#[summary("音声")]
+#[commands(join, leave, mute, unmute, deafen, undeafen, play_fade, play, clear, skip, queue, stop)]
+struct Voice;
 
 #[command]
 #[description = "そのまま返す"]
@@ -594,6 +620,703 @@ async fn solve_hutougou(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
+struct TrackEndNotifier {
+    chan_id: ChannelId,
+    http: Arc<Http>,
+}
+
+#[async_trait]
+impl VoiceEventHandler for TrackEndNotifier {
+    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        if let EventContext::Track(track_list) = ctx {
+            if let Err(why) = self.chan_id.say(&self.http, &format!("Tracks ended: {}.", track_list.len())).await {
+                println!("error!!: {}", why);
+            }
+        }
+        None
+    }
+}
+
+
+struct ChannelDurationNotifier {
+    chan_id: ChannelId,
+    count: Arc<AtomicUsize>,
+    http: Arc<Http>,
+}
+
+#[async_trait]
+impl VoiceEventHandler for ChannelDurationNotifier {
+    async fn act(&self, _ctx: &EventContext<'_>) -> Option<Event> {
+        /*
+        let count_before = self.count.fetch_add(1, Ordering::Relaxed);
+        if let Err(why) = self.chan_id.say(&self.http, &format!("I've been in this channel for {} minutes!", count_before + 1)).await {
+            println!("error!!: {}", why);
+        }
+        */
+
+        None
+    }
+}
+
+struct SongFader {
+    chan_id: ChannelId,
+    http: Arc<Http>,
+}
+
+#[async_trait]
+impl VoiceEventHandler for SongFader {
+    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        if let EventContext::Track(&[(state, track)]) = ctx {
+            let _ = track.set_volume(state.volume / 2.0);
+
+            if state.volume < 1e-2 {
+                let _ = track.stop();
+                if let Err(why) = self.chan_id.say(&self.http, "Stopping song...").await {
+                    println!("error!!: {}", why);
+                }
+                Some(Event::Cancel)
+            } else {
+                if let Err(why) = self.chan_id.say(&self.http, "Volume reduced.").await {
+                    println!("error!!: {}", why);
+                }
+                None
+            }
+        } else {
+            None
+        }
+    }
+}
+
+struct SongEndNotifier {
+    chan_id: ChannelId,
+    http: Arc<Http>,
+}
+
+#[async_trait]
+impl VoiceEventHandler for SongEndNotifier {
+    async fn act(&self, _ctx: &EventContext<'_>) -> Option<Event> {
+        if let Err(why) = self.chan_id.say(&self.http, "Song faded out completely!").await {
+            println!("error!!: {}", why);
+        }
+
+        None
+    }
+}
+
+
+
+#[command]
+#[description = "入室"]
+async fn join(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+    let channel_id = match guild.voice_states.get(&msg.author.id).and_then(|voice_state| voice_state.channel_id) {
+        Some(channel_id) => channel_id,
+        None => {
+            msg.reply(&ctx.http, "貴方がボイスチャンネルに入っていません！！").await?;
+            return Ok(());
+        }
+    };
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let (handle_lock, success) = manager.join(guild_id, channel_id).await;
+
+    if let Err(why) = success {
+        msg.channel_id.say(&ctx.http, format!("Error joining rhe channel\nreson: {}", why)).await?;
+        return Ok(());
+    }
+
+
+    msg.channel_id.say(&ctx.http, "ボイスチャンネルに参加しました。").await?;
+
+    let chan_id = msg.channel_id;
+
+    let send_http = ctx.http.clone();
+
+    let mut handle = handle_lock.lock().await;
+
+    handle.add_global_event(
+        Event::Track(TrackEvent::End),
+        TrackEndNotifier {
+            chan_id,
+            http: send_http,
+        },
+    );
+
+    let send_http = ctx.http.clone();
+
+    handle.add_global_event(
+        Event::Periodic(Duration::from_secs(60), None),
+        ChannelDurationNotifier {
+            chan_id,
+            count: Default::default(),
+            http: send_http,
+        },
+    );
+
+    Ok(())
+}
+
+#[command]
+#[description = "退室"]
+async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+    let has_handler = manager.get(guild_id).is_some();
+
+    if has_handler {
+        if let Err(e) = manager.remove(guild_id).await {
+            msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+            return Ok(());
+        }
+        msg.channel_id.say(&ctx.http, "ボイスチャンネルを抜けました。").await?;
+    } else {
+        msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+    }
+
+    Ok(())
+}
+
+#[command]
+#[description = "ミュート"]
+async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler) => handler,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        }
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    if handler.is_mute() {
+        msg.reply(&ctx.http, "既にミュート状態です").await?;
+        return Ok(())
+    }
+
+    if let Err(e) = handler.mute(true).await {
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        return Ok(());
+    }
+
+    msg.channel_id.say(&ctx.http, "ミュートしました。").await?;
+    
+    Ok(())
+}
+
+#[command]
+#[description = "ミュート解除"]
+async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    if let Err(e) = handler.mute(false).await {
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        return Ok(());
+    }
+
+    msg.channel_id.say(&ctx.http, "ミュートを解除しました。").await?;
+
+    Ok(())
+}
+
+#[command]
+#[description = "スピーカーミュート"]
+async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    if handler.is_deaf() {
+        msg.reply(&ctx.http, "もうすでにスピーカーミュートです").await?;
+        return Ok(());
+    }
+
+    if let Err(e) = handler.deafen(true).await {
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        return Ok(());
+    }
+
+    msg.channel_id.say(&ctx.http, "スピーカーミュートしました").await?;
+
+    Ok(())
+}
+
+#[command]
+#[description = "スピーカーミュート解除"]
+async fn undeafen(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    if !handler.is_deaf() {
+        msg.reply(&ctx.http, "スピーカーミュートしていません").await?;
+        return Ok(());
+    }
+
+    if let Err(e) = handler.deafen(false).await {
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        return Ok(());
+    }
+
+    msg.channel_id.say(&ctx.http, "スピーカーミュート解除しました").await?;
+
+    Ok(())
+}
+
+#[command]
+#[description = "プレーフェードって何？"]
+async fn play_fade(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let url = match args.single::<String>() {
+        Ok(url) => url,
+        Err(_) => {
+            msg.reply(&ctx.http, "適切なURLを張れ").await?;
+            return Ok(());
+        }
+    };
+
+    if !url.starts_with("http") {
+        msg.reply(&ctx.http, "適切なURLを張れ").await?;
+        return Ok(());
+    }
+
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    let source = match input::ytdl(&url).await {
+        Ok(source) => source,
+        Err(why) => {
+            println!("Err starting source: {:?}", why);
+
+            msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await?;
+
+            return Ok(());
+        },
+    };
+
+    // This handler object will allow you to, as needed,
+    // control the audio track via events and further commands.
+    let song = handler.play_source(source);
+    let send_http = ctx.http.clone();
+    let chan_id = msg.channel_id;
+
+    // This shows how to periodically fire an event, in this case to
+    // periodically make a track quieter until it can be no longer heard.
+    let _ = song.add_event(
+        Event::Periodic(Duration::from_secs(5), Some(Duration::from_secs(7))),
+        SongFader {
+            chan_id,
+            http: send_http,
+        },
+    );
+
+    let send_http = ctx.http.clone();
+
+    // This shows how to fire an event once an audio track completes,
+    // either due to hitting the end of the bytestream or stopped by user code.
+    let _ = song.add_event(
+        Event::Track(TrackEvent::End),
+        SongEndNotifier {
+            chan_id,
+            http: send_http,
+        },
+    );
+
+    Ok(())
+}
+
+#[command]
+#[description = "再生"]
+async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let url = match args.single::<String>() {
+        Ok(url) => url,
+        Err(_) => {
+            msg.reply(&ctx.http, "適切なURLを張れ").await?;
+            return Ok(());
+        }
+    };
+
+    if !url.starts_with("http") {
+        msg.reply(&ctx.http, "適切なURLを張れ").await?;
+        return Ok(());
+    }
+
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    let source = match input::ytdl(&url).await {
+        Ok(source) => source,
+        Err(why) => {
+            println!("Err starting source: {:?}", why);
+
+            msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await?;
+
+            return Ok(());
+        },
+    };
+
+    // This handler object will allow you to, as needed,
+    // control the audio track via events and further commands.
+    let song = handler.play_source(source);
+    let send_http = ctx.http.clone();
+    let chan_id = msg.channel_id;
+
+    let send_http = ctx.http.clone();
+
+    // This shows how to fire an event once an audio track completes,
+    // either due to hitting the end of the bytestream or stopped by user code.
+    let _ = song.add_event(
+        Event::Track(TrackEvent::End),
+        SongEndNotifier {
+            chan_id,
+            http: send_http,
+        },
+    );
+
+    Ok(())
+}
+
+#[command]
+#[description = "キューに追加"]
+async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let url = match args.single::<String>() {
+        Ok(url) => url,
+        Err(_) => {
+            msg.reply(&ctx.http, "適切なURLを張れ").await?;
+            return Ok(());
+        }
+    };
+
+    if !url.starts_with("http") {
+        msg.reply(&ctx.http, "適切なURLを張れ").await?;
+        return Ok(());
+    }
+
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    let source = match input::ytdl(&url).await {
+        Ok(source) => source,
+        Err(why) => {
+            println!("Err starting source: {:?}", why);
+
+            msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await?;
+
+            return Ok(());
+        },
+    };
+
+    // This handler object will allow you to, as needed,
+    // control the audio track via events and further commands.
+    let s: input::Input = source.into();
+    println!("{:?}", s.is_seekable());
+    let song = handler.enqueue_source(s);
+
+    msg.channel_id.say(&ctx.http, "キューに追加しました").await?;
+
+    Ok(())
+}
+
+#[command]
+#[description = "キュークリア"]
+async fn clear(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    let queue = handler.queue();
+    let _ = queue.stop();
+
+    msg.channel_id.say(&ctx.http, "キューをクリアしました").await?;
+
+    Ok(())
+}
+
+#[command]
+#[description = "スキップ"]
+async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    let queue = handler.queue();
+    let _ = queue.skip();
+
+    msg.channel_id.say(&ctx.http, "キューをスキップしました").await?;
+
+    Ok(())
+}
+
+#[command]
+#[description = "停止"]
+async fn stop(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache).await {
+        Some(guild) => guild,
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。001").await?;
+            return Ok(());
+        }
+    };
+    let guild_id = guild.id;
+
+    let manager = match songbird::get(ctx).await {
+        Some(manager) => manager.clone(),
+        None => {
+            msg.reply(&ctx.http, "エラーが発生しました。002").await?;
+            return Ok(());
+        }
+    };
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler_lock) => handler_lock,
+        None => {
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            return Ok(());
+        },
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    let queue = handler.stop();
+
+    msg.channel_id.say(&ctx.http, "再生を止めました").await?;
+
+    Ok(())
+}
+
 #[derive(Serialize, Deserialize)]
 struct Token {
     token: String,
@@ -618,12 +1341,14 @@ async fn main() {
         .help(&MY_HELP) // ヘルプコマンドを追加
         .group(&TEST_GROUP) // general を追加するには,GENERAL_GROUP とグループ名をすべて大文字にする
         .group(&GAME_GROUP)
-        .group(&PUZZLE_GROUP);
+        .group(&PUZZLE_GROUP)
+        .group(&VOICE_GROUP);
 
     // Botのクライアントを作成
     let mut client = Client::builder(&token)
         .event_handler(Handler) // 取得するイベント
         .framework(framework) // コマンドを登録
+        .register_songbird()
         .await
         .expect("Err creating client"); // エラーハンドリング
 
