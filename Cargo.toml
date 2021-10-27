@@ -17,3 +17,13 @@ serenity = {version = "0.10.7", features = ["client", "framework", "standard_fra
 tokio = {version = "1.6.0", features = ["macros", "rt-multi-thread"]}
 
 songbird = {version = "0.2.0", features = ["builtin-queue"]}
+
+diesel = { version = "1.4.6", features = ["postgres", "chrono"]}
+
+dotenv = "0.15.0"
+
+cron = "0.9.0"
+
+chrono = "0.4.19"
+
+regex = "1.5"
