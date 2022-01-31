@@ -1080,21 +1080,39 @@ fn raw_suhjong_miracle(yaku1: String, yaku2: String, kouho: String) -> String {
 }
 
 #[command]
-#[description = "数雀のをプレイする"]
+#[description = r"
+数雀をプレイする
+>sj START
+>sj {河に捨てる} {河から拾う}
+>sj SHOUB {河に捨てる} {河から拾う}
+>sj (BOT|BOT2|BOT3|BOT4)
+"]
+async fn sj(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    play_suhjong(ctx, msg, args).await
+}
+
+#[command]
+#[description = r"
+数雀をプレイする
+>play_suhjong START
+>play_suhjong {河に捨てる} {河から拾う}
+>play_suhjong SHOUB {河に捨てる} {河から拾う}
+>play_suhjong (BOT|BOT2|BOT3|BOT4)
+"]
 async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let param1 = match args.single::<String>() {
         Ok(s) => s,
         Err(_) => {
             msg.reply(&ctx.http, "引数がおかしいです").await?;
             return Ok(());
-        },
+        }
     };
 
     match &(param1.to_uppercase())[..] {
         "START" => {
             let m = raw_play_start_suhjong();
             msg.reply(&ctx.http, m).await?;
-        }
+        },
         "MIRACLE" => {
             let ref_content = match msg.message_reference.clone() {
                 Some(reference) => {
@@ -1126,7 +1144,7 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             };
 
             msg.reply(&ctx.http, m).await?;
-        }
+        },
         "CHECK" => {
             let ref_content = match msg.message_reference.clone() {
                 Some(reference) => {
@@ -1162,20 +1180,19 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             msg.reply(&ctx.http, m1).await?;
             msg.reply(&ctx.http, m2).await?;
         },
-        "NEXT" => {
+        "S" | "SHOUB" => {
             let (sute_str, hiro_str) = match (args.single::<String>(), args.single::<String>()) {
                 (Ok(s1), Ok(s2)) if s1.len() >= 1 && s1.len() <= 5 && s2.len() <= 5 => (s1, s2),
                 _ => {
                     msg.reply(&ctx.http, "引数がおかしいです").await?;
                     return Ok(());
-                },
+                }
             };
 
-            let sute:Vec<_> = sute_str.chars().map(|c| c as u32 - '0' as u32).collect();
-            let hiro:Vec<_> = if hiro_str.to_lowercase() == "none" {
-                Vec::new()
-            } else {
-                hiro_str.chars().map(|c| c as u32 - '0' as u32).collect()
+            let sute: Vec<_> = sute_str.chars().map(|c| c as u32 - '0' as u32).collect();
+            let hiro: Vec<_> = match &(hiro_str.to_lowercase())[..] {
+                "-" | "none" => Vec::new(),
+                _ => hiro_str.chars().map(|c| c as u32 - '0' as u32).collect()
             };
 
             let ref_content = match msg.message_reference.clone() {
@@ -1200,13 +1217,11 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             let ban = raw_format_play_suhjong(ref_content);
 
             let m = match ban {
-                Some(b) => {
-                    match b.next(sute, hiro) {
-                        Some(nb) => nb.to_string(),
-                        None => {
-                            msg.reply_ping(&ctx.http, "進行エラー").await?;
-                            return Ok(());
-                        }
+                Some(b) => match b.shoub(sute, hiro) {
+                    Some(nb) => nb.to_string(),
+                    None => {
+                        msg.reply_ping(&ctx.http, "進行エラー").await?;
+                        return Ok(());
                     }
                 },
                 None => {
@@ -1216,83 +1231,30 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             };
 
             msg.reply(&ctx.http, m).await?;
-
-        },
-        "SHOUB" => {
-            let (sute_str, hiro_str) = match (args.single::<String>(), args.single::<String>()) {
-                (Ok(s1), Ok(s2)) if s1.len() >= 1 && s1.len() <= 5 && s2.len() <= 5 => (s1, s2),
-                _ => {
-                    msg.reply(&ctx.http, "引数がおかしいです").await?;
-                    return Ok(());
-                },
-            };
-
-            let sute:Vec<_> = sute_str.chars().map(|c| c as u32 - '0' as u32).collect();
-            let hiro:Vec<_> = if hiro_str.to_lowercase() == "none" {
-                Vec::new()
-            } else {
-                hiro_str.chars().map(|c| c as u32 - '0' as u32).collect()
-            };
-
-            let ref_content = match msg.message_reference.clone() {
-                Some(reference) => {
-                    let channel_id = reference.channel_id;
-                    let message_id = match reference.message_id {
-                        Some(m_id) => m_id,
-                        None => {
-                            msg.reply_ping(&ctx.http, "エラー").await?;
-                            return Ok(());
-                        }
-                    };
-                    let ref_msg = channel_id.message(&ctx.http, message_id).await?;
-                    ref_msg.content
-                }
-                None => {
-                    msg.reply_ping(&ctx.http, "フォーマットエラー").await?;
-                    return Ok(());
-                }
-            };
-
-            let ban = raw_format_play_suhjong(ref_content);
-
-            let m = match ban {
-                Some(b) => {
-                    match b.shoub(sute, hiro) {
-                        Some(nb) => nb.to_string(),
-                        None => {
-                            msg.reply_ping(&ctx.http, "進行エラー").await?;
-                            return Ok(());
-                        }
-                    }
-                },
-                None => {
-                    msg.reply_ping(&ctx.http, "フォーマットエラー").await?;
-                    return Ok(());
-                }
-            };
-
-            msg.reply(&ctx.http, m).await?;
-
         },
         "KANSOU" => {
-            let (sute_str, hiro_str, draw_str) = match (args.single::<String>(), args.single::<String>(), args.single::<String>()) {
-                (Ok(s1), Ok(s2), Ok(s3)) if s1.len() <= 5 && s2.len() <= 5 && s3.len() <= 5 => (s1, s2, s3),
+            let (sute_str, hiro_str, draw_str) = match (
+                args.single::<String>(),
+                args.single::<String>(),
+                args.single::<String>(),
+            ) {
+                (Ok(s1), Ok(s2), Ok(s3)) if s1.len() <= 5 && s2.len() <= 5 && s3.len() <= 5 => {
+                    (s1, s2, s3)
+                }
                 _ => {
                     msg.reply(&ctx.http, "引数がおかしいです").await?;
                     return Ok(());
-                },
+                }
             };
 
-            let sute:Vec<_> = sute_str.chars().map(|c| c as u32 - '0' as u32).collect();
-            let hiro:Vec<_> = if hiro_str.to_lowercase() == "none" {
-                Vec::new()
-            } else {
-                hiro_str.chars().map(|c| c as u32 - '0' as u32).collect()
+            let sute: Vec<_> = sute_str.chars().map(|c| c as u32 - '0' as u32).collect();
+            let hiro: Vec<_> = match &(hiro_str.to_lowercase())[..] {
+                "-" | "none" => Vec::new(),
+                _ => hiro_str.chars().map(|c| c as u32 - '0' as u32).collect(),
             };
-            let draw:Vec<_> = if draw_str.to_lowercase() == "none" {
-                Vec::new()
-            } else {
-                draw_str.chars().map(|c| c as u32 - '0' as u32).collect()
+            let draw: Vec<_> = match &(draw_str.to_lowercase())[..] {
+                "-" | "none" => Vec::new(),
+                _ => draw_str.chars().map(|c| c as u32 - '0' as u32).collect(),
             };
 
             let ref_content = match msg.message_reference.clone() {
@@ -1317,13 +1279,11 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             let ban = raw_format_play_suhjong(ref_content);
 
             let m = match ban {
-                Some(b) => {
-                    match b.kansou(sute, hiro, draw) {
-                        Some(nb) => nb.to_string(),
-                        None => {
-                            msg.reply_ping(&ctx.http, "進行エラー").await?;
-                            return Ok(());
-                        }
+                Some(b) => match b.kansou(sute, hiro, draw) {
+                    Some(nb) => nb.to_string(),
+                    None => {
+                        msg.reply_ping(&ctx.http, "進行エラー").await?;
+                        return Ok(());
                     }
                 },
                 None => {
@@ -1333,9 +1293,8 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             };
 
             msg.reply(&ctx.http, m).await?;
-
         },
-        "BOT" => {
+        "BOT" | "BOT2" | "BOT3" | "BOT4" => {
             let ref_content = match msg.message_reference.clone() {
                 Some(reference) => {
                     let channel_id = reference.channel_id;
@@ -1360,8 +1319,11 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             msg.reply(&ctx.http, "時間がかかる場合があります").await?;
 
             let m = match ban {
-                Some(b) => {
-                    b.bot_play().to_string()
+                Some(b) => match &(param1.to_uppercase())[..] {
+                    "BOT2" => b.bot2_play().to_string(),
+                    "BOT3" => b.bot3_play().to_string(),
+                    "BOT4" => b.bot4_play().to_string(),
+                    _ => b.bot_play().to_string(),
                 },
                 None => {
                     msg.reply_ping(&ctx.http, "フォーマットエラー").await?;
@@ -1370,11 +1332,59 @@ async fn play_suhjong(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             };
 
             msg.reply(&ctx.http, m).await?;
-
         },
         _ => {
-            msg.reply(&ctx.http, "引数がおかしいです").await?;
-            return Ok(());
+            let sute_str = param1;
+            let hiro_str = match args.single::<String>() {
+                Ok(s2) if sute_str.len() >= 1 && sute_str.len() <= 5 && s2.len() <= 5 => s2,
+                _ => {
+                    msg.reply(&ctx.http, "引数がおかしいです").await?;
+                    return Ok(());
+                }
+            };
+
+            let sute: Vec<_> = sute_str.chars().map(|c| c as u32 - '0' as u32).collect();
+            let hiro: Vec<_> = match &(hiro_str.to_lowercase())[..] {
+                "none" | "-" => Vec::new(),
+                _ => hiro_str.chars().map(|c| c as u32 - '0' as u32).collect(),
+            };
+
+            let ref_content = match msg.message_reference.clone() {
+                Some(reference) => {
+                    let channel_id = reference.channel_id;
+                    let message_id = match reference.message_id {
+                        Some(m_id) => m_id,
+                        None => {
+                            msg.reply_ping(&ctx.http, "エラー").await?;
+                            return Ok(());
+                        }
+                    };
+                    let ref_msg = channel_id.message(&ctx.http, message_id).await?;
+                    ref_msg.content
+                }
+                None => {
+                    msg.reply_ping(&ctx.http, "フォーマットエラー").await?;
+                    return Ok(());
+                }
+            };
+
+            let ban = raw_format_play_suhjong(ref_content);
+
+            let m = match ban {
+                Some(b) => match b.next(sute, hiro) {
+                    Some(nb) => nb.to_string(),
+                    None => {
+                        msg.reply_ping(&ctx.http, "進行エラー").await?;
+                        return Ok(());
+                    }
+                },
+                None => {
+                    msg.reply_ping(&ctx.http, "フォーマットエラー").await?;
+                    return Ok(());
+                }
+            };
+
+            msg.reply(&ctx.http, m).await?;
         }
     };
 
@@ -1437,40 +1447,37 @@ impl SuhjongMen {
     fn to_string(self) -> String {
         let turn = self.turn;
         let is_shoubed = match self.is_shoubed {
-            true => "y",
-            false => "n",
+            true => "〇",
+            false => "-",
         };
         let player1: String = self.player1.iter().map(|n| n.to_string()).collect();
         let player2: String = self.player2.iter().map(|n| n.to_string()).collect();
         let river1: String = self.river1.iter().map(|n| n.to_string()).collect();
         let river2: String = self.river2.iter().map(|n| n.to_string()).collect();
         let is_player1 = match self.is_player1 {
-            true => "y",
-            false => "n",
+            true => "〇",
+            false => "-",
         };
         let is_player2 = match !self.is_player1 {
-            true => "y",
-            false => "n",
+            true => "〇",
+            false => "-",
         };
         format!(
-            r"
-数雀{} ターン経過:{} 勝負:{}
-
+            r"数雀{} ターン経過:{} 勝負:{}
 player1 番:{}
 ```
 {}
-```
-`河 {}`
-
-山 0:{} 1:{} 2:{} 3:{} 4:{} 5:{} 6:{} 7:{} 8:{} 9:{}
-
+````河 {}`
+山 ||0:{} 1:{} 2:{} 3:{} 4:{} 5:{} 6:{} 7:{} 8:{} 9:{}||
 `河 {}`
 ```
 {}
-```
-player2 番:{}
-",
-            if self.is_finised {"勝負あり"} else {"プレイ中"},
+```player2 番:{}",
+            if self.is_finised {
+                "勝負あり"
+            } else {
+                "プレイ中"
+            },
             turn,
             is_shoubed,
             is_player1,
@@ -1738,7 +1745,7 @@ player2 番:{}
                         vs_miracle_kakuritsu_yaku = (temp12.clone(), kakuritsu_yaku_miracle);
                     }
                     for j in 1..=i {
-                        for pettern3 in (0..j).combinations(j) {
+                        for pettern3 in (0..i).combinations(j) {
                             for pettern4 in (0..5).combinations(j) {
                                 let (temp23, temp33) = temp22.clone().iter().enumerate().fold(
                                     (Vec::new(), Vec::new()),
@@ -2075,20 +2082,77 @@ player2 番:{}
         let mut kakuritsu_k = None;
         let mut kakuritsu_score = None;
         let mut kakuritsu_swap = (Vec::new(), Vec::new());
-        let mut sum_yaku =  Vec::new();
+        let mut sum_yaku = Vec::new();
         let mut sum_k = None;
         let mut sum_score = None;
         let mut sum_swap = (Vec::new(), Vec::new());
+        let mut max_digit_yaku = Vec::new();
+        let mut max_digit_k_win = None;
+        let mut max_digit_k_max = None;
+        let mut max_digit_mean_score = None;
+        let mut max_digit_swap = (Vec::new(), Vec::new());
         let hantei2 = hantei(temp2[0], temp2[1], temp2[2], temp2[3], temp2[4]);
         let score2 = if hantei2.is_empty() {
             0
         } else {
             hantei2.iter().next().expect("絶対ある").execute_pettern_l()
         };
+        let is_digit_win =
+            temp1[4] * 10000 + temp1[3] * 1000 + temp1[2] * 100 + temp1[1] * 10 + temp1[0]
+                > temp2[4] * 10000 + temp2[3] * 1000 + temp2[2] * 100 + temp2[1] * 10 + temp2[0];
         for i in 1..=5 {
-            for j in 0..=std::cmp::min(i, kouho_len) {
-                for pettern1 in (0..kouho_len).combinations(j) {
-                    for pettern2 in (0..5).combinations(i) {
+            for pettern2 in (0..5).combinations(i) {
+                let temp32 =
+                    temp1
+                        .clone()
+                        .iter()
+                        .enumerate()
+                        .fold(Vec::new(), |mut t3, (i1, &e1)| {
+                            if pettern2.contains(&i1) {
+                                t3.push(e1);
+                            }
+                            t3
+                        });
+                let mut is_score2_greater_than_80 = false;
+                for k in 1..=i {
+                    for pettern3 in (0..i).combinations(k) {
+                        for pettern4 in (0..5).combinations(k) {
+                            let (temp23, temp33) = temp2.clone().iter().enumerate().fold(
+                                (Vec::new(), Vec::new()),
+                                |(mut t2, mut t3), (i2, &e2)| {
+                                    if pettern4.contains(&i2) {
+                                        t3.push(e2);
+                                    } else {
+                                        t2.push(e2);
+                                    }
+                                    (t2, t3)
+                                },
+                            );
+                            let (mut temp23, _) = temp32.clone().into_iter().enumerate().fold(
+                                (temp23, temp33),
+                                |(mut t2, t3), (i3, e3)| {
+                                    if pettern3.contains(&i3) {
+                                        t2.push(e3);
+                                    }
+                                    (t2, t3)
+                                },
+                            );
+                            temp23.sort();
+                            let hantei2 =
+                                hantei(temp23[0], temp23[1], temp23[2], temp23[3], temp23[4]);
+                            let score2 = if hantei2.is_empty() {
+                                0
+                            } else {
+                                hantei2.iter().next().expect("絶対ある").execute_pettern_l()
+                            };
+                            if score2 > 80 {
+                                is_score2_greater_than_80 = true;
+                            }
+                        }
+                    }
+                }
+                for j in 0..=std::cmp::min(i, kouho_len) {
+                    for pettern1 in (0..kouho_len).combinations(j) {
                         let (temp12, temp32, sute) = temp1.clone().iter().enumerate().fold(
                             (Vec::new(), Vec::new(), Vec::new()),
                             |(mut t1, mut t3, mut sute), (i1, &e1)| {
@@ -2123,6 +2187,8 @@ player2 番:{}
                         let sum_yaku_temp = temp12.clone();
                         let mut sum_score_temp = 0;
                         let mut scores = Vec::new();
+                        let max_digit_yaku_temp = temp12.clone();
+                        let mut digit_win_numbers = 0;
                         for pettern3 in (0..=9).combinations_with_replacement(i - j).filter(|p| {
                             (0..=9).into_iter().all(|n| {
                                 p.iter().filter(|&&m| n == m).count() <= self.yama[n as usize]
@@ -2152,12 +2218,27 @@ player2 番:{}
                                 min_yaku_temp = temp12.clone();
                             }
                             scores.push(score1);
+                            if !is_score2_greater_than_80 {
+                                if temp12[4] * 10000
+                                    + temp12[3] * 1000
+                                    + temp12[2] * 100
+                                    + temp12[1] * 10
+                                    + temp12[0]
+                                    > temp2[4] * 10000
+                                        + temp2[3] * 1000
+                                        + temp2[2] * 100
+                                        + temp2[1] * 10
+                                        + temp2[0]
+                                {
+                                    digit_win_numbers += 1;
+                                }
+                            }
                         }
 
                         let (sum, filter_sum, count) = scores.into_iter().fold(
                             (0, 0, 0),
                             |(sum, filter_sum, count), value| {
-                                if value >= score2 {
+                                if value >= score2 && !is_score2_greater_than_80 {
                                     (sum + value, filter_sum + 1, count + 1)
                                 } else {
                                     (sum + value, filter_sum, count + 1)
@@ -2167,6 +2248,7 @@ player2 番:{}
                         mean_score_temp = sum as f64 / count as f64;
                         kakuritsu_temp = filter_sum as f64 / count as f64;
                         let mean_sum = sum_score_temp as f64 / count as f64;
+                        let digit_win_k = digit_win_numbers as f64 / count as f64;
                         if max_score_temp > max_score {
                             max_score = max_score_temp;
                             max_yaku = max_yaku_temp;
@@ -2195,6 +2277,13 @@ player2 番:{}
                             sum_k = Some(kakuritsu_temp);
                             sum_swap = swap.clone();
                         }
+                        if Some(digit_win_k) > max_digit_k_max {
+                            max_digit_k_max = Some(digit_win_k);
+                            max_digit_yaku = max_digit_yaku_temp;
+                            max_digit_k_win = Some(kakuritsu_temp);
+                            max_digit_mean_score = Some(mean_score_temp);
+                            max_digit_swap = swap.clone();
+                        }
                     }
                 }
             }
@@ -2207,6 +2296,9 @@ player2 番:{}
         let kakuritsu_k = kakuritsu_k.expect("絶対Some!!");
         let sum_score = sum_score.expect("絶対Some!!");
         let sum_k = sum_k.expect("絶対Some!!");
+        let max_digit_k_win = max_digit_k_win.expect("絶対Some!!");
+        let max_digit_k_max = max_digit_k_max.expect("絶対Some!!");
+        let max_digit_mean_score = max_digit_mean_score.expect("絶対Some!!");
         let max_yaku = [
             max_yaku[0],
             max_yaku[1],
@@ -2242,6 +2334,12 @@ player2 番:{}
             sum_score,
             sum_k,
             sum_swap,
+            max_digit_yaku,
+            max_digit_k_win,
+            max_digit_k_max,
+            max_digit_mean_score,
+            max_digit_swap,
+            is_digit_win,
         }
     }
 
@@ -2289,27 +2387,45 @@ player2 番:{}
 
         for _ in 0..len1 {
             let element = sute.remove(0);
-            let index = temp1.iter().enumerate().find(|(_, &e)| e == element).map(|(i, _)| i)?;
+            let index = temp1
+                .iter()
+                .enumerate()
+                .find(|(_, &e)| e == element)
+                .map(|(i, _)| i)?;
             temp32.push(temp1.remove(index));
         }
 
         for _ in 0..len2 {
             let element = hiro.remove(0);
-            let index = temp3.iter().enumerate().find(|(_, &e)| e == element).map(|(i, _)| i)?;
+            let index = temp3
+                .iter()
+                .enumerate()
+                .find(|(_, &e)| e == element)
+                .map(|(i, _)| i)?;
             temp1.push(temp3.remove(index));
         }
 
         for _ in 0..len3 {
             let element = draw.remove(0);
-            let index = yama.iter().enumerate().find(|(_, &e)| e == element).map(|(i, _)| i)?;
+            let index = yama
+                .iter()
+                .enumerate()
+                .find(|(_, &e)| e == element)
+                .map(|(i, _)| i)?;
             temp1.push(yama.remove(index));
         }
 
         temp1.sort();
         temp32.sort();
 
-        let yama: Vec<_> = (0..=9).into_iter().map(|n| yama.iter().filter(|&&e| e == n).count()).collect();
-        let yama = [yama[0], yama[1], yama[2], yama[3], yama[4], yama[5], yama[6], yama[7], yama[8], yama[9]];
+        let yama: Vec<_> = (0..=9)
+            .into_iter()
+            .map(|n| yama.iter().filter(|&&e| e == n).count())
+            .collect();
+        let yama = [
+            yama[0], yama[1], yama[2], yama[3], yama[4], yama[5], yama[6], yama[7], yama[8],
+            yama[9],
+        ];
         let temp1 = [temp1[0], temp1[1], temp1[2], temp1[3], temp1[4]];
 
         let mut ban = self;
@@ -2388,13 +2504,21 @@ player2 番:{}
 
         for _ in 0..len1 {
             let element = sute.remove(0);
-            let index = temp1.iter().enumerate().find(|(_, &e)| e == element).map(|(i, _)| i)?;
+            let index = temp1
+                .iter()
+                .enumerate()
+                .find(|(_, &e)| e == element)
+                .map(|(i, _)| i)?;
             temp32.push(temp1.remove(index));
         }
 
         for _ in 0..len2 {
             let element = hiro.remove(0);
-            let index = temp3.iter().enumerate().find(|(_, &e)| e == element).map(|(i, _)| i)?;
+            let index = temp3
+                .iter()
+                .enumerate()
+                .find(|(_, &e)| e == element)
+                .map(|(i, _)| i)?;
             temp1.push(temp3.remove(index));
         }
 
@@ -2405,8 +2529,14 @@ player2 番:{}
         temp1.sort();
         temp32.sort();
 
-        let yama: Vec<_> = (0..=9).into_iter().map(|n| yama.iter().filter(|&&e| e == n).count()).collect();
-        let yama = [yama[0], yama[1], yama[2], yama[3], yama[4], yama[5], yama[6], yama[7], yama[8], yama[9]];
+        let yama: Vec<_> = (0..=9)
+            .into_iter()
+            .map(|n| yama.iter().filter(|&&e| e == n).count())
+            .collect();
+        let yama = [
+            yama[0], yama[1], yama[2], yama[3], yama[4], yama[5], yama[6], yama[7], yama[8],
+            yama[9],
+        ];
         let temp1 = [temp1[0], temp1[1], temp1[2], temp1[3], temp1[4]];
 
         let mut ban = self;
@@ -2432,11 +2562,18 @@ player2 番:{}
     fn bot_play(self) -> SuhjongMen {
         if self.turn == 0 {
             let miracle = self.miracle();
-            let (sute, hiro) = miracle.sum_swap;
-            self.next(sute, hiro).expect("Some！！")
+            if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
         } else if self.is_shoubed {
             let miracle = self.miracle();
-            if miracle.kakuritsu_score as f64 + miracle.kakuritsu_k * 100.0 > miracle.mean_score {
+            if miracle.kakuritsu_score as f64 + miracle.kakuritsu_k * 100.0
+                > miracle.mean_score + miracle.mean_k * 100.0
+            {
                 let (sute, hiro) = miracle.kakuritsu_swap;
                 self.next(sute, hiro).expect("Some！！")
             } else {
@@ -2449,24 +2586,216 @@ player2 番:{}
             if check.min_score1 > check.min_score2 - 10 {
                 let (sute, hiro) = check.min_swap;
                 self.next(sute, hiro).expect("Some！！")
-            } else {
+            } else if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
                 let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
                 self.next(sute, hiro).expect("Some！！")
             }
         } else {
             let miracle = self.miracle();
             let check = self.check();
-            if check.max_score1 >= 90 || check.max_score1 > check.max_score2 {
+            if check.max_score1 >= 90 {
                 let (sute, hiro) = check.max_swap;
                 self.shoub(sute, hiro).expect("Some！！")
-            } else if check.miracle_kakuritsu_k < 0.2 {
+            } else if check.miracle_kakuritsu_k < 0.1 {
                 let (sute, hiro) = check.miracle_kakuritsu_swap;
                 self.shoub(sute, hiro).expect("Some！！")
             } else if check.min_score1 > check.min_score2 {
                 let (sute, hiro) = check.min_swap;
                 self.next(sute, hiro).expect("Some！！")
-            } else {
+            } else if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
                 let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        }
+    }
+
+    fn bot2_play(self) -> SuhjongMen {
+        if self.turn == 0 {
+            let miracle = self.miracle();
+            if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else if self.is_shoubed {
+            let miracle = self.miracle();
+            if miracle.kakuritsu_score as f64 + miracle.kakuritsu_k * 100.0
+                > miracle.mean_score + miracle.mean_k * 100.0
+            {
+                let (sute, hiro) = miracle.kakuritsu_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.mean_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else if self.turn == 1 {
+            let check = self.check();
+            let miracle = self.miracle();
+            if check.min_score1 > check.min_score2 - 10 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else {
+            let miracle = self.miracle();
+            let check = self.check();
+            if check.miracle_kakuritsu_k < 0.2 {
+                let (sute, hiro) = check.miracle_kakuritsu_swap;
+                self.shoub(sute, hiro).expect("Some！！")
+            } else if check.max_score1 > check.max_score2 {
+                let (sute, hiro) =check.max_swap;
+                self.shoub(sute, hiro).expect("Some！！")
+            } else if check.min_score1 > check.min_score2 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        }
+    }
+
+    fn bot3_play(self) -> SuhjongMen {
+        if self.turn == 0 {
+            let miracle = self.miracle();
+            if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else if self.is_shoubed {
+            let miracle = self.miracle();
+            if miracle.min_score as f64 > miracle.kakuritsu_k * miracle.kakuritsu_score {
+                let (sute, hiro) = miracle.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.kakuritsu_score as f64 + miracle.kakuritsu_k * 100.0
+                > miracle.mean_score + miracle.mean_k * 100.0
+            {
+                let (sute, hiro) = miracle.kakuritsu_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.mean_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else if self.turn == 1 {
+            let miracle = self.miracle();
+            if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let check = self.check();
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else {
+            let miracle = self.miracle();
+            let check = self.check();
+            if check.max_score1 >= 90 {
+                let (sute, hiro) = check.max_swap;
+                self.shoub(sute, hiro).expect("Some！！")
+            } else if check.miracle_kakuritsu_k < 0.1 {
+                let (sute, hiro) = check.miracle_kakuritsu_swap;
+                self.shoub(sute, hiro).expect("Some！！")
+            } else if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        }
+    }
+
+    fn bot4_play(self) -> SuhjongMen {
+        if self.turn == 0 {
+            let miracle = self.miracle();
+            if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else if self.is_shoubed {
+            let miracle = self.miracle();
+            if miracle.min_score as f64 > miracle.kakuritsu_k * miracle.kakuritsu_score {
+                let (sute, hiro) = miracle.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.kakuritsu_score as f64 + miracle.kakuritsu_k * 100.0
+                > miracle.mean_score + miracle.mean_k * 100.0
+            {
+                let (sute, hiro) = miracle.kakuritsu_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.mean_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else if self.turn == 1 {
+            let miracle = self.miracle();
+            if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let check = self.check();
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
+                self.next(sute, hiro).expect("Some！！")
+            }
+        } else {
+            let miracle = self.miracle();
+            let check = self.check();
+            if check.miracle_kakuritsu_k < 0.2 {
+                let (sute, hiro) = check.miracle_kakuritsu_swap;
+                self.shoub(sute, hiro).expect("Some！！")
+            } else if check.max_score1 > check.max_score2 {
+                let (sute, hiro) =check.max_swap;
+                self.shoub(sute, hiro).expect("Some！！")
+            } else if miracle.max_digit_k_max < 0.01 || miracle.sum_k < 0.01 {
+                let (sute, hiro) = check.min_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else if miracle.is_digit_win {
+                let (sute, hiro) = miracle.sum_swap;
+                self.next(sute, hiro).expect("Some！！")
+            } else {
+                let (sute, hiro) = miracle.max_digit_swap;
                 self.next(sute, hiro).expect("Some！！")
             }
         }
@@ -2511,21 +2840,16 @@ async fn format_play_suhjong(ctx: &Context, msg: &Message) -> CommandResult {
 
 fn raw_format_play_suhjong(s: String) -> Option<SuhjongMen> {
     let re = Regex::new(
-        r"数雀プレイ中 ターン経過:(\d+) 勝負:([yn])
-
-player1 番:([ny])
+        r"数雀プレイ中 ターン経過:(\d+) 勝負:([-〇])
+player1 番:([-〇])
 ```
 (\d{5})
-```
-`河 (\d{0,5})`
-
-山 0:(\d) 1:(\d) 2:(\d) 3:(\d) 4:(\d) 5:(\d) 6:(\d) 7:(\d) 8:(\d) 9:(\d)
-
+````河 (\d{0,5})`
+山 \|\|0:(\d) 1:(\d) 2:(\d) 3:(\d) 4:(\d) 5:(\d) 6:(\d) 7:(\d) 8:(\d) 9:(\d)\|\|
 `河 (\d{0,5})`
 ```
 (\d{5})
-```
-player2 番:([ny])",
+```player2 番:([-〇])",
     )
     .unwrap();
 
@@ -2534,9 +2858,9 @@ player2 番:([ny])",
     }
 
     let caps = re.captures(&s).unwrap();
-    let turn = caps[1].chars().next().unwrap() as usize - '0' as usize;
-    let is_shoubed = caps[2] == *"y";
-    let is_player1 = caps[3] == *"y";
+    let turn = caps[1].parse().ok()?;
+    let is_shoubed = caps[2] == *"〇";
+    let is_player1 = caps[3] == *"〇";
     let player1: Vec<_> = caps[4].chars().map(|c| c as u32 - '0' as u32).collect();
     let player1 = [player1[0], player1[1], player1[2], player1[3], player1[4]];
     let river1: Vec<_> = caps[5].chars().map(|c| c as u32 - '0' as u32).collect();
@@ -2559,7 +2883,7 @@ player2 番:([ny])",
     let river2: Vec<_> = caps[16].chars().map(|c| c as u32 - '0' as u32).collect();
     let player2: Vec<_> = caps[17].chars().map(|c| c as u32 - '0' as u32).collect();
     let player2 = [player2[0], player2[1], player2[2], player2[3], player2[4]];
-    let is_player2 = caps[18] == *"y";
+    let is_player2 = caps[18] == *"〇";
     if turn <= 2 && is_shoubed {
         return None;
     }
@@ -2608,11 +2932,17 @@ struct SuhjongMiracle {
     sum_score: f64,
     sum_k: f64,
     sum_swap: (Vec<u32>, Vec<u32>),
+    max_digit_yaku: Vec<u32>,
+    max_digit_k_win: f64,
+    max_digit_k_max: f64,
+    max_digit_mean_score: f64,
+    max_digit_swap: (Vec<u32>, Vec<u32>),
+    is_digit_win: bool,
 }
 
 impl SuhjongMiracle {
     fn to_string(self) -> String {
-        format!("aite: 得点({})\nmax: 得点({})\n```\n{:?}\n{:?}\n```\nmin: 得点({})\n```\n{:?}\n{:?}\n```\nmean: 得点({:.2}) {:.2}%\n```\n{:?}\n{:?}\n```\nkakuritsu: 得点({:.2}) {:.2}%\n```\n{:?}\n{:?}\n```\nsum: 得点({:.2}) {:.2}%\n```\n{:?}\n{:?}\n```", self.aite_score, self.max_score, self.max_swap, self.max_yaku, self.min_score, self.min_swap, self.min_yaku, self.mean_score, self.mean_k * 100.0, self.mean_swap, self.mean_yaku, self.kakuritsu_score, self.kakuritsu_k * 100.0, self.kakuritsu_swap, self.kakuritsu_yaku, self.sum_score, self.sum_k * 100.0, self.sum_swap, self.sum_yaku)
+        format!("aite: 得点({})\nmax: 得点({})\n```\n{:?}\n{:?}\n```\nmin: 得点({})\n```\n{:?}\n{:?}\n```\nmean: 得点({:.2}) {:.2}%\n```\n{:?}\n{:?}\n```\nkakuritsu: 得点({:.2}) {:.2}%\n```\n{:?}\n{:?}\n```\nsum: 得点({:.2}) {:.2}%\n```\n{:?}\n{:?}\n```\nmax_gigit: {:.2}% 得点({:.2}) {:.2}%\n```\n{:?}\n{:?}\n```", self.aite_score, self.max_score, self.max_swap, self.max_yaku, self.min_score, self.min_swap, self.min_yaku, self.mean_score, self.mean_k * 100.0, self.mean_swap, self.mean_yaku, self.kakuritsu_score, self.kakuritsu_k * 100.0, self.kakuritsu_swap, self.kakuritsu_yaku, self.sum_score, self.sum_k * 100.0, self.sum_swap, self.sum_yaku, self.max_digit_k_max * 100.0, self.max_digit_mean_score, self.max_digit_k_win * 100.0, self.max_digit_swap, self.max_digit_yaku)
     }
 }
 

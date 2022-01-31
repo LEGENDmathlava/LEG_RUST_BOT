@@ -186,7 +186,7 @@ struct Test;
 #[group]
 #[description("ゲーム")]
 #[summary("ゲーム")]
-#[commands(nkodice, play_suhjong)]
+#[commands(nkoudice, nkodice, sj, play_suhjong, devil1, devil2)]
 struct Game;
 
 #[group]
@@ -216,7 +216,7 @@ struct Suhjong;
 #[command]
 #[description = "そのまま返す"]
 async fn echo(ctx: &Context, msg: &Message) -> CommandResult {
-    let answer = msg.content.chars().skip(7).take(2000).collect::<String>();
+    let answer = msg.content.chars().skip(6).take(2000).collect::<String>();
     msg.reply(&ctx.http, answer).await?;
     Ok(())
 }
@@ -224,7 +224,7 @@ async fn echo(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[description = "そのまま返す"]
 async fn echo_ping(ctx: &Context, msg: &Message) -> CommandResult {
-    let answer = msg.content.chars().skip(12).take(2000).collect::<String>();
+    let answer = msg.content.chars().skip(11).take(2000).collect::<String>();
     msg.reply_ping(&ctx.http, answer).await?;
     Ok(())
 }
@@ -232,7 +232,7 @@ async fn echo_ping(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[description = "そのまま返す"]
 async fn echo_mention(ctx: &Context, msg: &Message) -> CommandResult {
-    let answer = msg.content.chars().skip(15).take(2000).collect::<String>();
+    let answer = msg.content.chars().skip(14).take(2000).collect::<String>();
     msg.reply_mention(&ctx.http, answer).await?;
     Ok(())
 }
@@ -396,6 +396,108 @@ async fn count20(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+#[description = "悪魔の計算機"]
+async fn devil1(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let num_string = match args.single::<String>() {
+        Ok(x) => x,
+        Err(_) => {
+            msg.reply_ping(&ctx.http, "引数が正しくありません")
+                .await?;
+            return Ok(());
+        }
+    };
+    let num = match num_string.parse::<u64>() {
+        Ok(x) => x,
+        Err(why) => {
+            msg.reply_ping(&ctx.http, format!("引数が正しくありません\n{:?}", why))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let rev_num_string: String = format!("{}", num).chars().rev().collect();
+    let max = match rev_num_string.chars().max() {
+        Some(c) => c as u64 - '0' as u64,
+        None => {
+            msg.reply_ping(&ctx.http, "謎のエラー")
+                .await?;
+            return Ok(());
+        }
+    };
+    let ans = rev_num_string.chars().fold(0, |ans, c| ans * (max + 1) + c as u64 - '0' as u64);
+
+    msg.reply(&ctx.http, format!("{}", ans)).await?;
+    if ans == 666 {
+        msg.channel_id.say(&ctx.http, "congratulations").await?;
+    }
+
+    Ok(())
+}
+
+#[command]
+#[description = "悪魔の計算機"]
+async fn devil2(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let mut hint_flag = false;
+    let num_string = match args.single::<String>() {
+        Ok(x) => {
+            if x.to_lowercase() == "hint" {
+                hint_flag = true;
+                match args.single::<String>() {
+                    Ok(x) => x,
+                    Err(_) => {
+                        msg.reply_ping(&ctx.http, "引数が正しくありません")
+                            .await?;
+                        return Ok(());
+                    }
+                }
+            } else {
+                x
+            }
+        },
+        Err(_) => {
+            msg.reply_ping(&ctx.http, "引数が正しくありません")
+                .await?;
+            return Ok(());
+        }
+    };
+    let num = match num_string.parse::<u64>() {
+        Ok(x) => x,
+        Err(why) => {
+            msg.reply_ping(&ctx.http, format!("引数が正しくありません\n{:?}", why))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let rev_num_string: String = format!("{}", num).chars().collect();
+    let mut num_iter = rev_num_string.chars();
+    let first_digit = match num_iter.next() {
+        Some(c) => c as u64 as f64 - '0' as u64 as f64,
+        None => {
+            msg.reply_ping(&ctx.http, "謎のエラー")
+                .await?;
+            return Ok(());
+        }
+    };
+    let ans = num_iter.fold(first_digit, |ans, c| match c {
+        '0' | '1' | '5' | '7' => ans * (c as u64 as f64 - '0' as u64 as f64),
+        '2' | '3' | '4' | '6' | '8' | '9' => ans / (c as u64 as f64 - '0' as u64 as f64),
+        _ => std::f64::NAN,
+    });
+    let ans = if hint_flag {
+        ans * num as f64 / 10.0
+    } else {
+        (ans * num as f64 / 10.0).floor()
+    };
+    msg.reply(&ctx.http, format!("{}", ans)).await?;
+    if ans == 666.0 {
+        msg.channel_id.say(&ctx.http, "congratulations").await?;
+    }
+
+    Ok(())
+}
+
+#[command]
 #[description = "nkodice"]
 async fn nkodice(ctx: &Context, msg: &Message) -> CommandResult {
     let dice = vec!["う", "ま", "ち", "ん", "こ", "お"]
@@ -441,49 +543,108 @@ async fn nkodice(ctx: &Context, msg: &Message) -> CommandResult {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = msg
             .channel_id
-            .say(&ctx.http, "***UNCHI***".to_string())
+            // .say(&ctx.http, "***UNCHI***".to_string())
+            .say(&ctx.http, "<:kiyaku:861595067961966603>")
             .await?;
     }
     if u >= 1 && nn >= 1 && ko >= 1 {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = msg
             .channel_id
-            .say(&ctx.http, "***UNKO***".to_string())
+            // .say(&ctx.http, "***UNKO***".to_string())
+            .say(&ctx.http, "<:kiyaku:861595067961966603>")
             .await?;
     }
     if ma >= 1 && nn >= 1 && ko >= 1 {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = msg
             .channel_id
-            .say(&ctx.http, "***MANKO***".to_string())
+            // .say(&ctx.http, "***MANKO***".to_string())
+            .say(&ctx.http, "<:kiyaku:861595067961966603>")
             .await?;
     }
     if o >= 1 && ma >= 1 && nn >= 1 && ko >= 1 {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = msg
             .channel_id
-            .say(&ctx.http, "***OMANKO***".to_string())
+            // .say(&ctx.http, "***OMANKO***".to_string())
+            .say(&ctx.http, "<:kiyaku:861595067961966603>")
             .await?;
     }
     if chi >= 1 && nn >= 1 && ko >= 1 {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = msg
             .channel_id
-            .say(&ctx.http, "***CHINKO***".to_string())
+            // .say(&ctx.http, "***CHINKO***".to_string())
+            .say(&ctx.http, "<:kiyaku:861595067961966603>")
             .await?;
     }
     if chi >= 2 && nn >= 2 {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = msg
             .channel_id
-            .say(&ctx.http, "***CHINCHIN***".to_string())
+            // .say(&ctx.http, "***CHINCHIN***".to_string())
+            .say(&ctx.http, "<:kiyaku:861595067961966603>")
             .await?;
     }
     if o > 1 && chi >= 2 && nn >= 2 {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = msg
             .channel_id
-            .say(&ctx.http, "***OCHINCHIN***".to_string())
+            // .say(&ctx.http, "***OCHINCHIN***".to_string())
+            .say(&ctx.http, "<:kiyaku:861595067961966603>")
+            .await?;
+    }
+    Ok(())
+}
+
+#[command]
+#[description = "nkoudice"]
+async fn nkoudice(ctx: &Context, msg: &Message) -> CommandResult {
+    let dice = vec!["せ", "ん", "こ", "う"]
+        .iter()
+        .map(|v| v.to_string())
+        .collect();
+    let mut demes = Vec::new();
+    for _ in 1..=5 {
+        demes.push(roll(&dice));
+    }
+    let demes = demes;
+    for deme in &demes {
+        if let Some(v) = deme {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let _ = msg.channel_id.say(&ctx.http, v).await?;
+        }
+    }
+    let u = demes
+        .iter()
+        .filter(|deme| **deme == Some("う".to_string()))
+        .count();
+    let se = demes
+        .iter()
+        .filter(|deme| **deme == Some("せ".to_string()))
+        .count();
+    let nn = demes
+        .iter()
+        .filter(|deme| **deme == Some("ん".to_string()))
+        .count();
+    let ko = demes
+        .iter()
+        .filter(|deme| **deme == Some("こ".to_string()))
+        .count();
+    if se >= 1 && nn >= 1 && ko >= 1 && u >= 1 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let _ = msg
+            .channel_id
+            .say(&ctx.http, "***SENKOU***")
+            .await?;
+    }
+    if ko >= 2 && u >= 2 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let _ = msg
+            .channel_id
+            // .say(&ctx.http, "***UNKO***".to_string())
+            .say(&ctx.http, "***KOUKOU***")
             .await?;
     }
     Ok(())
@@ -778,6 +939,24 @@ impl VoiceEventHandler for SongFader {
     }
 }
 
+struct SongVolumeFader {
+    chan_id: ChannelId,
+    http: Arc<Http>,
+}
+
+#[async_trait]
+impl VoiceEventHandler for SongVolumeFader {
+    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        if let EventContext::Track(&[(state, track)]) = ctx {
+            let _ = track.set_volume(1.0);
+
+            None
+        } else {
+            None
+        }
+    }
+}
+
 struct SongEndNotifier {
     chan_id: ChannelId,
     http: Arc<Http>,
@@ -840,8 +1019,8 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     let mut handle = handle_lock.lock().await;
 
     handle.add_global_event(
-        Event::Track(TrackEvent::End),
-        TrackEndNotifier {
+        Event::Track(TrackEvent::Play),
+        SongVolumeFader {
             chan_id,
             http: send_http,
         },
@@ -1469,7 +1648,7 @@ async fn information(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
 #[description = "お題を追加する"]
 async fn push_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let odai = msg.content.chars().skip(12).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let odai = msg.content.chars().skip(11).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         if odai.is_empty() {
             msg.reply(&ctx.http, "何も書かれていません").await?;
             return Ok(());
@@ -1486,7 +1665,7 @@ async fn push_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を出す"]
 async fn pop_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(11).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let like_odais = msg.content.chars().skip(10).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         let odai = raw_pop_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
         msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
     }
@@ -1497,7 +1676,7 @@ async fn pop_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を追加する"]
 async fn push(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let odai = msg.content.chars().skip(7).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let odai = msg.content.chars().skip(6).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         if odai.is_empty() {
             msg.reply(&ctx.http, "何も書かれていません").await?;
             return Ok(());
@@ -1514,7 +1693,7 @@ async fn push(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を出す"]
 async fn pop(ctx: &Context, msg: &Message, argsS: Args) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(6).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let like_odais = msg.content.chars().skip(5).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         let odai = raw_pop_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
         msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
     }
@@ -1544,7 +1723,7 @@ async fn all_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題一覧(like)"]
 async fn like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(12).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let like_odais = msg.content.chars().skip(11).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         let all = raw_like_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
         let mut output = format!("{}: {}\n", "id", "name");
         for odai in all {
@@ -1564,7 +1743,7 @@ async fn like_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題一覧(not_like)"]
 async fn not_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let not_like_odais = msg.content.chars().skip(16).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let not_like_odais = msg.content.chars().skip(15).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         let all = raw_not_like_odai(not_like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
         let mut output = format!("{}: {}\n", "id", "name");
         for odai in all {
@@ -1608,7 +1787,7 @@ async fn delete_odai(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
 #[description = "お題を出す(like)"]
 async fn pop_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(16).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let like_odais = msg.content.chars().skip(15).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         let odai = raw_pop_like_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
         msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
     }
@@ -1619,7 +1798,7 @@ async fn pop_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を出す(not_like)"]
 async fn pop_not_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let not_like_odais = msg.content.chars().skip(20).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let not_like_odais = msg.content.chars().skip(19).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
         let odai = raw_pop_not_like_odai(not_like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
         msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
     }
@@ -1646,7 +1825,7 @@ async fn main() {
     // コマンド系の設定
     let framework = StandardFramework::new()
         // |c| c はラムダ式
-        .configure(|c| c.prefix("L:")) // コマンドプレフィックス
+        .configure(|c| c.prefix(">")) // コマンドプレフィックス
         .help(&MY_HELP) // ヘルプコマンドを追加
         .group(&TEST_GROUP) // general を追加するには,GENERAL_GROUP とグループ名をすべて大文字にする
         .group(&GAME_GROUP)
