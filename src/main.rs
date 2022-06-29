@@ -1,10 +1,10 @@
 #[macro_use]
 extern crate diesel;
 
-use songbird::tracks::TrackError;
-use std::{collections::HashSet, fs::File, io::BufReader, usize};
 use itertools::Itertools;
+use songbird::tracks::TrackError;
 use std::cmp;
+use std::{collections::HashSet, fs::File, io::BufReader, usize};
 
 use std::{
     env,
@@ -16,19 +16,10 @@ use std::{
 };
 
 use songbird::{
-    input::{
-        self,
-        restartable::Restartable,
-    },
-    Event,
-    EventContext,
-    EventHandler as VoiceEventHandler,
-    SerenityInit,
-    TrackEvent,
-    Call,
+    input::{self, restartable::Restartable},
+    Call, Event, EventContext, EventHandler as VoiceEventHandler, SerenityInit, TrackEvent,
 };
 
-use serenity::http::Http;
 use serenity::async_trait;
 use serenity::builder::CreateEmbedAuthor;
 use serenity::framework::standard::{
@@ -37,6 +28,7 @@ use serenity::framework::standard::{
     Args, CommandError, CommandGroup, CommandResult, HelpOptions,
 };
 use serenity::framework::StandardFramework;
+use serenity::http::Http;
 use serenity::model::{
     channel::GuildChannel, channel::Message, event::TypingStartEvent, gateway::Ready,
     id::ChannelId, id::GuildId, id::UserId,
@@ -51,23 +43,23 @@ use rand::Rng;
 
 struct Handler;
 
-use diesel::prelude::*;
-use diesel::pg::PgConnection;
-use dotenv::dotenv;
-use diesel::BoolExpressionMethods;
 use diesel::expression::grouped::Grouped;
 use diesel::expression::operators::{And, Or};
 use diesel::expression::{AsExpression, Expression};
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use diesel::sql_types::Bool;
+use diesel::BoolExpressionMethods;
+use dotenv::dotenv;
 
 mod schema;
 use schema::odais;
 use schema::odais::dsl::*;
 
-use chrono::{Utc, Local, DateTime, Date, Timelike};
+use chrono::{Date, DateTime, Local, Timelike, Utc};
 
 mod commands;
-use commands::{suhjong::*};
+use commands::suhjong::*;
 
 #[derive(Queryable, Debug, Clone)]
 struct Odai {
@@ -76,15 +68,14 @@ struct Odai {
 }
 
 #[derive(Insertable)]
-#[table_name="odais"]
+#[table_name = "odais"]
 struct NewOdai {
     title: String,
 }
 
 fn establish_connection() -> PgConnection {
     dotenv().expect("aaaaaaaa");
-    let database_url = env::var("DATABASE_URL")
-    .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     PgConnection::establish(&database_url).expect(&format!("Error connectiong to {}", database_url))
 }
 
@@ -129,14 +120,20 @@ impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {}
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
-        if let Err(why) = ChannelId(804573278937153596u64).say(&ctx.http, "test").await {
+        if let Err(why) = ChannelId(804573278937153596u64)
+            .say(&ctx.http, "test")
+            .await
+        {
             println!("Error sending message: {:?}", why);
         }
         loop {
             while Local::now().hour() != 21 {
                 tokio::time::sleep(Duration::from_secs(30)).await;
             }
-            if let Err(why) = ChannelId(887591543526014996u64).say(&ctx.http, "21時です").await {
+            if let Err(why) = ChannelId(887591543526014996u64)
+                .say(&ctx.http, "21時です")
+                .await
+            {
                 println!("Error sending message: {:?}", why);
             }
             tokio::time::sleep(Duration::from_secs(4000)).await;
@@ -179,7 +176,7 @@ async fn my_help(
     test_embed,
     count20,
     test_refference,
-    format_play_suhjong,
+    format_play_suhjong
 )]
 struct Test;
 
@@ -198,13 +195,38 @@ struct Puzzle;
 #[group]
 #[description("音声")]
 #[summary("音声")]
-#[commands(join, leave, mute, unmute, deafen, undeafen, play_fade, play, clear, skip, queue, stop, information)]
+#[commands(
+    join,
+    leave,
+    mute,
+    unmute,
+    deafen,
+    undeafen,
+    play_fade,
+    play,
+    clear,
+    skip,
+    queue,
+    stop,
+    information
+)]
 struct Voice;
 
 #[group]
 #[description("お題箱")]
 #[summary("お題箱")]
-#[commands(pop_odai, push_odai, all_odai, delete_odai, push, pop, like_odai, not_like_odai, pop_like_odai, pop_not_like_odai)]
+#[commands(
+    pop_odai,
+    push_odai,
+    all_odai,
+    delete_odai,
+    push,
+    pop,
+    like_odai,
+    not_like_odai,
+    pop_like_odai,
+    pop_not_like_odai
+)]
 struct Odaibako;
 
 #[group]
@@ -333,12 +355,12 @@ async fn test_refference(ctx: &Context, msg: &Message) -> CommandResult {
                 None => {
                     msg.reply_ping(&ctx.http, "エラー").await?;
                     return Ok(());
-                },
+                }
             };
             let ref_msg = channel_id.message(&ctx.http, message_id).await?;
             msg.reply(&ctx.http, ref_msg.content).await?;
             Ok(())
-        },
+        }
         None => {
             msg.reply_ping(&ctx.http, "エラー").await?;
             Ok(())
@@ -401,8 +423,7 @@ async fn devil1(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let num_string = match args.single::<String>() {
         Ok(x) => x,
         Err(_) => {
-            msg.reply_ping(&ctx.http, "引数が正しくありません")
-                .await?;
+            msg.reply_ping(&ctx.http, "引数が正しくありません").await?;
             return Ok(());
         }
     };
@@ -419,12 +440,13 @@ async fn devil1(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let max = match rev_num_string.chars().max() {
         Some(c) => c as u64 - '0' as u64,
         None => {
-            msg.reply_ping(&ctx.http, "謎のエラー")
-                .await?;
+            msg.reply_ping(&ctx.http, "謎のエラー").await?;
             return Ok(());
         }
     };
-    let ans = rev_num_string.chars().fold(0, |ans, c| ans * (max + 1) + c as u64 - '0' as u64);
+    let ans = rev_num_string
+        .chars()
+        .fold(0, |ans, c| ans * (max + 1) + c as u64 - '0' as u64);
 
     msg.reply(&ctx.http, format!("{}", ans)).await?;
     if ans == 666 {
@@ -445,18 +467,16 @@ async fn devil2(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                 match args.single::<String>() {
                     Ok(x) => x,
                     Err(_) => {
-                        msg.reply_ping(&ctx.http, "引数が正しくありません")
-                            .await?;
+                        msg.reply_ping(&ctx.http, "引数が正しくありません").await?;
                         return Ok(());
                     }
                 }
             } else {
                 x
             }
-        },
+        }
         Err(_) => {
-            msg.reply_ping(&ctx.http, "引数が正しくありません")
-                .await?;
+            msg.reply_ping(&ctx.http, "引数が正しくありません").await?;
             return Ok(());
         }
     };
@@ -474,8 +494,7 @@ async fn devil2(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let first_digit = match num_iter.next() {
         Some(c) => c as u64 as f64 - '0' as u64 as f64,
         None => {
-            msg.reply_ping(&ctx.http, "謎のエラー")
-                .await?;
+            msg.reply_ping(&ctx.http, "謎のエラー").await?;
             return Ok(());
         }
     };
@@ -634,10 +653,7 @@ async fn nkoudice(ctx: &Context, msg: &Message) -> CommandResult {
         .count();
     if se >= 1 && nn >= 1 && ko >= 1 && u >= 1 {
         tokio::time::sleep(Duration::from_secs(2)).await;
-        let _ = msg
-            .channel_id
-            .say(&ctx.http, "***SENKOU***")
-            .await?;
+        let _ = msg.channel_id.say(&ctx.http, "***SENKOU***").await?;
     }
     if ko >= 2 && u >= 2 {
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -649,7 +665,6 @@ async fn nkoudice(ctx: &Context, msg: &Message) -> CommandResult {
     }
     Ok(())
 }
-
 
 fn roll(dice: &Vec<String>) -> Option<String> {
     let mut rng = rand::thread_rng();
@@ -679,7 +694,10 @@ impl HutougouPuzzle {
             for col in 0..size {
                 let possible_numbers_cell: HashSet<u8> = match grid[row * 2][col * 4] {
                     '?' => (1..=size as u8).into_iter().collect(),
-                    digit @ '1' ..= '9' => {collect_number += 1; Some(digit as u8 - 48).into_iter().collect()},
+                    digit @ '1'..='9' => {
+                        collect_number += 1;
+                        Some(digit as u8 - 48).into_iter().collect()
+                    }
                     _ => return None,
                 };
                 possible_numbers_row.push(possible_numbers_cell);
@@ -688,7 +706,12 @@ impl HutougouPuzzle {
             possible_numbers.push(possible_numbers_row);
         }
         let possible_numbers = possible_numbers;
-        Some(Self{size, collect_number, grid: grid.clone(), possible_numbers})
+        Some(Self {
+            size,
+            collect_number,
+            grid: grid.clone(),
+            possible_numbers,
+        })
     }
     fn get_mut_digit_character(&mut self, row: usize, col: usize) -> &mut char {
         &mut self.grid[row * 2][col * 4]
@@ -704,7 +727,16 @@ impl HutougouPuzzle {
         let sets: Vec<&HashSet<u8>> = self.possible_numbers[row].iter().collect();
         let kosuu = self.size;
         for i in (1..=kosuu).rev() {
-            for set in (0..kosuu).combinations(i).map(|v| v.into_iter().fold(HashSet::new(), |mut u, j| {u.extend(sets[j].clone()); u})).filter(|set| set.len() == i) {
+            for set in (0..kosuu)
+                .combinations(i)
+                .map(|v| {
+                    v.into_iter().fold(HashSet::new(), |mut u, j| {
+                        u.extend(sets[j].clone());
+                        u
+                    })
+                })
+                .filter(|set| set.len() == i)
+            {
                 list.push(set);
             }
         }
@@ -715,7 +747,16 @@ impl HutougouPuzzle {
         let sets: Vec<&HashSet<u8>> = self.possible_numbers.iter().map(|v| &v[col]).collect();
         let kosuu = self.size;
         for i in (1..=kosuu).rev() {
-            for set in (0..kosuu).combinations(i).map(|v| v.into_iter().fold(HashSet::new(), |mut u, j| {u.extend(sets[j].clone()); u})).filter(|set| set.len() == i) {
+            for set in (0..kosuu)
+                .combinations(i)
+                .map(|v| {
+                    v.into_iter().fold(HashSet::new(), |mut u, j| {
+                        u.extend(sets[j].clone());
+                        u
+                    })
+                })
+                .filter(|set| set.len() == i)
+            {
                 list.push(set);
             }
         }
@@ -727,35 +768,111 @@ impl HutougouPuzzle {
         let mut max = size as u8;
         if row > 0 {
             match self.get_hutougou_col(row - 1, col) {
-                '^' => min = cmp::max(min, self.possible_numbers[row - 1][col].iter().min().expect("elements must exist") + 1),
-                'v' => max = cmp::min(max, self.possible_numbers[row - 1][col].iter().max().expect("elements must exist") - 1),
+                '^' => {
+                    min = cmp::max(
+                        min,
+                        self.possible_numbers[row - 1][col]
+                            .iter()
+                            .min()
+                            .expect("elements must exist")
+                            + 1,
+                    )
+                }
+                'v' => {
+                    max = cmp::min(
+                        max,
+                        self.possible_numbers[row - 1][col]
+                            .iter()
+                            .max()
+                            .expect("elements must exist")
+                            - 1,
+                    )
+                }
                 _ => return None,
             }
         }
         if col > 0 {
             match self.get_hutougou_row(row, col - 1) {
-                '<' => min = cmp::max(min, self.possible_numbers[row][col - 1].iter().min().expect("elements must exist") + 1),
-                '>' => max = cmp::min(max, self.possible_numbers[row][col - 1].iter().max().expect("elements must exist") - 1),
+                '<' => {
+                    min = cmp::max(
+                        min,
+                        self.possible_numbers[row][col - 1]
+                            .iter()
+                            .min()
+                            .expect("elements must exist")
+                            + 1,
+                    )
+                }
+                '>' => {
+                    max = cmp::min(
+                        max,
+                        self.possible_numbers[row][col - 1]
+                            .iter()
+                            .max()
+                            .expect("elements must exist")
+                            - 1,
+                    )
+                }
                 _ => return None,
             }
         }
         if col < size - 1 {
             match self.get_hutougou_row(row, col) {
-                '>' => min = cmp::max(min, self.possible_numbers[row][col + 1].iter().min().expect("elements must exist") + 1),
-                '<' => max = cmp::min(max, self.possible_numbers[row][col + 1].iter().max().expect("elements must exist") - 1),
+                '>' => {
+                    min = cmp::max(
+                        min,
+                        self.possible_numbers[row][col + 1]
+                            .iter()
+                            .min()
+                            .expect("elements must exist")
+                            + 1,
+                    )
+                }
+                '<' => {
+                    max = cmp::min(
+                        max,
+                        self.possible_numbers[row][col + 1]
+                            .iter()
+                            .max()
+                            .expect("elements must exist")
+                            - 1,
+                    )
+                }
                 _ => return None,
             }
         }
         if row < size - 1 {
             match self.get_hutougou_col(row, col) {
-                'v' => min = cmp::max(min, self.possible_numbers[row + 1][col].iter().min().expect("elements must exist") + 1),
-                '^' => max = cmp::min(max, self.possible_numbers[row + 1][col].iter().max().expect("elements must exist") - 1),
+                'v' => {
+                    min = cmp::max(
+                        min,
+                        self.possible_numbers[row + 1][col]
+                            .iter()
+                            .min()
+                            .expect("elements must exist")
+                            + 1,
+                    )
+                }
+                '^' => {
+                    max = cmp::min(
+                        max,
+                        self.possible_numbers[row + 1][col]
+                            .iter()
+                            .max()
+                            .expect("elements must exist")
+                            - 1,
+                    )
+                }
                 _ => return None,
             }
         }
         Some((min..=max).collect())
     }
-    fn reduce_possible_numbers(&mut self, row: usize, col: usize) -> std::result::Result<bool, &'static str> {
+    fn reduce_possible_numbers(
+        &mut self,
+        row: usize,
+        col: usize,
+    ) -> std::result::Result<bool, &'static str> {
         if self.collect_number == self.size * self.size {
             return Ok(true);
         }
@@ -768,18 +885,27 @@ impl HutougouPuzzle {
         changed = changed.intersection(&range).map(|&value| value).collect();
         let complete_list_row = self.complete_list_row(row);
         let complete_list_col = self.complete_list_col(col);
-        for complete_pettern in complete_list_row.into_iter().chain(complete_list_col.into_iter()) {
-            let temp: HashSet<u8> = changed.difference(&complete_pettern).map(|&value| value).collect();
+        for complete_pettern in complete_list_row
+            .into_iter()
+            .chain(complete_list_col.into_iter())
+        {
+            let temp: HashSet<u8> = changed
+                .difference(&complete_pettern)
+                .map(|&value| value)
+                .collect();
             if !temp.is_empty() {
                 changed = temp;
             }
         }
         let kosuu_after = changed.len();
         if kosuu_after == 0 {
-            return Err("可能性がなくなりました。このプログラムが間違っているか、パズルが間違っています。");
+            return Err(
+                "可能性がなくなりました。このプログラムが間違っているか、パズルが間違っています。",
+            );
         }
         if kosuu_before != 1 && kosuu_after == 1 {
-            *self.get_mut_digit_character(row, col) = (changed.iter().next().expect("element must be one") + 48) as char;
+            *self.get_mut_digit_character(row, col) =
+                (changed.iter().next().expect("element must be one") + 48) as char;
             self.collect_number += 1;
             if self.collect_number == self.size * self.size {
                 return Ok(true);
@@ -809,7 +935,10 @@ impl HutougouPuzzle {
             }
         }
         if self.collect_number != self.size * self.size {
-            println!("collect_number: {}, size: {}", self.collect_number, self.size);
+            println!(
+                "collect_number: {}, size: {}",
+                self.collect_number, self.size
+            );
             Err("確定しませんでした。このプログラムが間違っているか、パズルが間違っています")
         } else {
             Ok(())
@@ -820,17 +949,28 @@ impl HutougouPuzzle {
         for (row, possible_numbers_row) in self.possible_numbers.into_iter().enumerate() {
             for (col, possible_numbers_cell) in possible_numbers_row.into_iter().enumerate() {
                 s += &format!("({}, {}): ", row, col);
-                s += &possible_numbers_cell.into_iter().map(|value| format!("{}", value)).collect::<Vec<String>>().join(", ");
+                s += &possible_numbers_cell
+                    .into_iter()
+                    .map(|value| format!("{}", value))
+                    .collect::<Vec<String>>()
+                    .join(", ");
                 s += "\n";
             }
             s += "\n";
         }
-        msg.reply_ping(&ctx.http, "```".to_string() + &s + "```").await?;
+        msg.reply_ping(&ctx.http, "```".to_string() + &s + "```")
+            .await?;
         Ok(())
     }
     async fn print(self, ctx: &Context, msg: &Message) -> CommandResult {
-        let s = self.grid.into_iter().map(|v| v.into_iter().collect::<String>()).collect::<Vec<String>>().join("\n");
-        msg.reply_ping(&ctx.http, "```".to_string() + &s + "```").await?;
+        let s = self
+            .grid
+            .into_iter()
+            .map(|v| v.into_iter().collect::<String>())
+            .collect::<Vec<String>>()
+            .join("\n");
+        msg.reply_ping(&ctx.http, "```".to_string() + &s + "```")
+            .await?;
         Ok(())
     }
 }
@@ -838,13 +978,17 @@ impl HutougouPuzzle {
 #[command]
 #[description = "不等号パズルソルバー"]
 async fn solve_hutougou(ctx: &Context, msg: &Message) -> CommandResult {
-    let blocks:Vec<&str> = msg.content.split("```").collect();
+    let blocks: Vec<&str> = msg.content.split("```").collect();
     if blocks.len() != 3 {
-        msg.reply_ping(&ctx.http, "Code block was not found or too many").await?;
+        msg.reply_ping(&ctx.http, "Code block was not found or too many")
+            .await?;
         return Ok(());
     }
     let block = blocks.get(1).expect("blocks must 3 elements").trim();
-    let grid: Vec<Vec<char>> = block.split("\n").map(|line| line.chars().collect::<Vec<_>>()).collect();
+    let grid: Vec<Vec<char>> = block
+        .split("\n")
+        .map(|line| line.chars().collect::<Vec<_>>())
+        .collect();
     let size = grid.len();
     if size < 1 || size > 17 {
         msg.reply_ping(&ctx.http, "puzzle size is illegal").await?;
@@ -857,15 +1001,16 @@ async fn solve_hutougou(ctx: &Context, msg: &Message) -> CommandResult {
     let mut puzzle = match HutougouPuzzle::from_grid(&grid) {
         Some(v) => v,
         None => {
-            msg.reply_ping(&ctx.http, "puzzle format is illegal").await?;
+            msg.reply_ping(&ctx.http, "puzzle format is illegal")
+                .await?;
             return Ok(());
-        },
+        }
     };
     if let Err(err_msg) = puzzle.solve() {
         msg.reply_ping(&ctx.http, err_msg).await?;
         puzzle.clone().print_zantei(ctx, msg).await?;
         puzzle.print(ctx, msg).await?;
-        return Ok(())
+        return Ok(());
     }
     puzzle.print(ctx, msg).await?;
     // msg.reply_ping(&ctx.http, "Has not implemented yet").await?;
@@ -881,14 +1026,17 @@ struct TrackEndNotifier {
 impl VoiceEventHandler for TrackEndNotifier {
     async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
         if let EventContext::Track(track_list) = ctx {
-            if let Err(why) = self.chan_id.say(&self.http, &format!("Tracks ended: {}.", track_list.len())).await {
+            if let Err(why) = self
+                .chan_id
+                .say(&self.http, &format!("Tracks ended: {}.", track_list.len()))
+                .await
+            {
                 println!("error!!: {}", why);
             }
         }
         None
     }
 }
-
 
 struct ChannelDurationNotifier {
     chan_id: ChannelId,
@@ -965,15 +1113,17 @@ struct SongEndNotifier {
 #[async_trait]
 impl VoiceEventHandler for SongEndNotifier {
     async fn act(&self, _ctx: &EventContext<'_>) -> Option<Event> {
-        if let Err(why) = self.chan_id.say(&self.http, "Song faded out completely!").await {
+        if let Err(why) = self
+            .chan_id
+            .say(&self.http, "Song faded out completely!")
+            .await
+        {
             println!("error!!: {}", why);
         }
 
         None
     }
 }
-
-
 
 #[command]
 #[description = "入室"]
@@ -986,10 +1136,15 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
         }
     };
     let guild_id = guild.id;
-    let channel_id = match guild.voice_states.get(&msg.author.id).and_then(|voice_state| voice_state.channel_id) {
+    let channel_id = match guild
+        .voice_states
+        .get(&msg.author.id)
+        .and_then(|voice_state| voice_state.channel_id)
+    {
         Some(channel_id) => channel_id,
         None => {
-            msg.reply(&ctx.http, "貴方がボイスチャンネルに入っていません！！").await?;
+            msg.reply(&ctx.http, "貴方がボイスチャンネルに入っていません！！")
+                .await?;
             return Ok(());
         }
     };
@@ -1005,12 +1160,18 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     let (handle_lock, success) = manager.join(guild_id, channel_id).await;
 
     if let Err(why) = success {
-        msg.channel_id.say(&ctx.http, format!("Error joining rhe channel\nreson: {}", why)).await?;
+        msg.channel_id
+            .say(
+                &ctx.http,
+                format!("Error joining rhe channel\nreson: {}", why),
+            )
+            .await?;
         return Ok(());
     }
 
-
-    msg.channel_id.say(&ctx.http, "ボイスチャンネルに参加しました。").await?;
+    msg.channel_id
+        .say(&ctx.http, "ボイスチャンネルに参加しました。")
+        .await?;
 
     let chan_id = msg.channel_id;
 
@@ -1063,12 +1224,16 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 
     if has_handler {
         if let Err(e) = manager.remove(guild_id).await {
-            msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+            msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e))
+                .await?;
             return Ok(());
         }
-        msg.channel_id.say(&ctx.http, "ボイスチャンネルを抜けました。").await?;
+        msg.channel_id
+            .say(&ctx.http, "ボイスチャンネルを抜けました。")
+            .await?;
     } else {
-        msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+        msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+            .await?;
     }
 
     Ok(())
@@ -1097,7 +1262,8 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler) => handler,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
         }
     };
@@ -1106,16 +1272,16 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
 
     if handler.is_mute() {
         msg.reply(&ctx.http, "既にミュート状態です").await?;
-        return Ok(())
+        return Ok(());
     }
 
     if let Err(e) = handler.mute(true).await {
-        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e))
+            .await?;
         return Ok(());
     }
 
     msg.channel_id.say(&ctx.http, "ミュートしました。").await?;
-    
     Ok(())
 }
 
@@ -1142,19 +1308,23 @@ async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
 
     if let Err(e) = handler.mute(false).await {
-        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e))
+            .await?;
         return Ok(());
     }
 
-    msg.channel_id.say(&ctx.http, "ミュートを解除しました。").await?;
+    msg.channel_id
+        .say(&ctx.http, "ミュートを解除しました。")
+        .await?;
 
     Ok(())
 }
@@ -1182,24 +1352,29 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
 
     if handler.is_deaf() {
-        msg.reply(&ctx.http, "もうすでにスピーカーミュートです").await?;
+        msg.reply(&ctx.http, "もうすでにスピーカーミュートです")
+            .await?;
         return Ok(());
     }
 
     if let Err(e) = handler.deafen(true).await {
-        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e))
+            .await?;
         return Ok(());
     }
 
-    msg.channel_id.say(&ctx.http, "スピーカーミュートしました").await?;
+    msg.channel_id
+        .say(&ctx.http, "スピーカーミュートしました")
+        .await?;
 
     Ok(())
 }
@@ -1227,24 +1402,29 @@ async fn undeafen(ctx: &Context, msg: &Message) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
 
     if !handler.is_deaf() {
-        msg.reply(&ctx.http, "スピーカーミュートしていません").await?;
+        msg.reply(&ctx.http, "スピーカーミュートしていません")
+            .await?;
         return Ok(());
     }
 
     if let Err(e) = handler.deafen(false).await {
-        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e)).await?;
+        msg.reply(&ctx.http, format!("エラーが発生しました。003\n{:?}", e))
+            .await?;
         return Ok(());
     }
 
-    msg.channel_id.say(&ctx.http, "スピーカーミュート解除しました").await?;
+    msg.channel_id
+        .say(&ctx.http, "スピーカーミュート解除しました")
+        .await?;
 
     Ok(())
 }
@@ -1285,9 +1465,10 @@ async fn play_fade(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
@@ -1297,10 +1478,12 @@ async fn play_fade(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
         Err(why) => {
             println!("Err starting source: {:?}", why);
 
-            msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await?;
+            msg.channel_id
+                .say(&ctx.http, "Error sourcing ffmpeg")
+                .await?;
 
             return Ok(());
-        },
+        }
     };
 
     // This handler object will allow you to, as needed,
@@ -1370,9 +1553,10 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
@@ -1382,10 +1566,12 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         Err(why) => {
             println!("Err starting source: {:?}", why);
 
-            msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await?;
+            msg.channel_id
+                .say(&ctx.http, "Error sourcing ffmpeg")
+                .await?;
 
             return Ok(());
-        },
+        }
     };
 
     // This handler object will allow you to, as needed,
@@ -1420,7 +1606,8 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         }
     };
 
-    if !url.starts_with("http") || url.contains("atodenaosu") { // あとで直す
+    if !url.starts_with("http") || url.contains("atodenaosu") {
+        // あとで直す
         msg.reply(&ctx.http, "適切なURLを張れ").await?;
         return Ok(());
     }
@@ -1445,9 +1632,10 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
@@ -1457,13 +1645,17 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         Err(why) => {
             println!("Err starting source: {:?}", why);
 
-            msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await?;
+            msg.channel_id
+                .say(&ctx.http, "Error sourcing ffmpeg")
+                .await?;
 
             return Ok(());
-        },
+        }
     };
 
-    msg.channel_id.say(&ctx.http, format!("**DEBUG**\n{:?}", source)).await?;
+    msg.channel_id
+        .say(&ctx.http, format!("**DEBUG**\n{:?}", source))
+        .await?;
 
     // This handler object will allow you to, as needed,
     // control the audio track via events and further commands.
@@ -1471,7 +1663,9 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     println!("{:?}", s.is_seekable());
     let song = handler.enqueue_source(s);
 
-    msg.channel_id.say(&ctx.http, "キューに追加しました").await?;
+    msg.channel_id
+        .say(&ctx.http, "キューに追加しました")
+        .await?;
 
     Ok(())
 }
@@ -1499,9 +1693,10 @@ async fn clear(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
@@ -1509,7 +1704,9 @@ async fn clear(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let queue = handler.queue();
     let _ = queue.stop();
 
-    msg.channel_id.say(&ctx.http, "キューをクリアしました").await?;
+    msg.channel_id
+        .say(&ctx.http, "キューをクリアしました")
+        .await?;
 
     Ok(())
 }
@@ -1537,9 +1734,10 @@ async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
@@ -1547,7 +1745,9 @@ async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let queue = handler.queue();
     let _ = queue.skip();
 
-    msg.channel_id.say(&ctx.http, "キューをスキップしました").await?;
+    msg.channel_id
+        .say(&ctx.http, "キューをスキップしました")
+        .await?;
 
     Ok(())
 }
@@ -1575,9 +1775,10 @@ async fn stop(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
@@ -1588,7 +1789,6 @@ async fn stop(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     Ok(())
 }
-
 
 #[command]
 #[description = "インフォメーション"]
@@ -1613,9 +1813,10 @@ async fn information(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
     let handler_lock = match manager.get(guild_id) {
         Some(handler_lock) => handler_lock,
         None => {
-            msg.reply(&ctx.http, "現在ボイスチャットに参加していません").await?;
+            msg.reply(&ctx.http, "現在ボイスチャットに参加していません")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     let mut handler = handler_lock.lock().await;
@@ -1625,30 +1826,44 @@ async fn information(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
     for track in queue.current_queue() {
         let s_info = match track.get_info().await {
             Ok(inform) => Ok(format!("{:?}", inform)),
-            Err(why) => Err(why),  
+            Err(why) => Err(why),
         };
         informs.push(s_info);
     }
-    let string_informations = match informs.into_iter().collect::<std::result::Result<Vec<_>, TrackError>>() {
+    let string_informations = match informs
+        .into_iter()
+        .collect::<std::result::Result<Vec<_>, TrackError>>()
+    {
         Ok(v) => v.into_iter().join("\n"),
         Err(why) => {
             msg.reply(&ctx.http, format!("{}", why)).await?;
-            return Ok(())
+            return Ok(());
         }
     };
-    
 
-    msg.channel_id.say(&ctx.http, format!("queue:{:?}\n{}", queue, string_informations)).await?;
+    msg.channel_id
+        .say(
+            &ctx.http,
+            format!("queue:{:?}\n{}", queue, string_informations),
+        )
+        .await?;
 
     Ok(())
 }
-
 
 #[command]
 #[description = "お題を追加する"]
 async fn push_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let odai = msg.content.chars().skip(11).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let odai = msg
+            .content
+            .chars()
+            .skip(11)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
         if odai.is_empty() {
             msg.reply(&ctx.http, "何も書かれていません").await?;
             return Ok(());
@@ -1665,9 +1880,24 @@ async fn push_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を出す"]
 async fn pop_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(10).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
-        let odai = raw_pop_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
-        msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
+        let like_odais = msg
+            .content
+            .chars()
+            .skip(10)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let odai = raw_pop_odai(
+            like_odais
+                .split("\n")
+                .filter(|line| !line.trim().is_empty())
+                .map(|s| s.to_string()),
+        );
+        msg.channel_id
+            .say(&ctx.http, "# image ".to_string() + &odai)
+            .await?;
     }
     Ok(())
 }
@@ -1676,7 +1906,15 @@ async fn pop_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を追加する"]
 async fn push(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let odai = msg.content.chars().skip(6).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
+        let odai = msg
+            .content
+            .chars()
+            .skip(6)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
         if odai.is_empty() {
             msg.reply(&ctx.http, "何も書かれていません").await?;
             return Ok(());
@@ -1693,9 +1931,24 @@ async fn push(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を出す"]
 async fn pop(ctx: &Context, msg: &Message, argsS: Args) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(5).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
-        let odai = raw_pop_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
-        msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
+        let like_odais = msg
+            .content
+            .chars()
+            .skip(5)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let odai = raw_pop_odai(
+            like_odais
+                .split("\n")
+                .filter(|line| !line.trim().is_empty())
+                .map(|s| s.to_string()),
+        );
+        msg.channel_id
+            .say(&ctx.http, "# image ".to_string() + &odai)
+            .await?;
     }
     Ok(())
 }
@@ -1723,8 +1976,21 @@ async fn all_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題一覧(like)"]
 async fn like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(11).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
-        let all = raw_like_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
+        let like_odais = msg
+            .content
+            .chars()
+            .skip(11)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let all = raw_like_odai(
+            like_odais
+                .split("\n")
+                .filter(|line| !line.trim().is_empty())
+                .map(|s| s.to_string()),
+        );
         let mut output = format!("{}: {}\n", "id", "name");
         for odai in all {
             let line = format!("{}: {}\n", odai.id, odai.title.replace("\n", " "));
@@ -1743,8 +2009,21 @@ async fn like_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題一覧(not_like)"]
 async fn not_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let not_like_odais = msg.content.chars().skip(15).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
-        let all = raw_not_like_odai(not_like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
+        let not_like_odais = msg
+            .content
+            .chars()
+            .skip(15)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let all = raw_not_like_odai(
+            not_like_odais
+                .split("\n")
+                .filter(|line| !line.trim().is_empty())
+                .map(|s| s.to_string()),
+        );
         let mut output = format!("{}: {}\n", "id", "name");
         for odai in all {
             let line = format!("{}: {}\n", odai.id, odai.title.replace("\n", " "));
@@ -1767,16 +2046,19 @@ async fn delete_odai(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
             Ok(v) => v,
             Err(_) => {
                 msg.reply(&ctx.http, "idを入力してください").await?;
-                return Ok(())
+                return Ok(());
             }
         };
         let deleted = raw_delete_odai(delete_id);
         match deleted {
             Some(odai_name) => {
-                msg.channel_id.say(&ctx.http, format!("{}を削除しました。", odai_name)).await?;
-            },
+                msg.channel_id
+                    .say(&ctx.http, format!("{}を削除しました。", odai_name))
+                    .await?;
+            }
             None => {
-                msg.reply(&ctx.http, "指定したidのお題が存在しません").await?;
+                msg.reply(&ctx.http, "指定したidのお題が存在しません")
+                    .await?;
             }
         }
     }
@@ -1787,9 +2069,24 @@ async fn delete_odai(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
 #[description = "お題を出す(like)"]
 async fn pop_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let like_odais = msg.content.chars().skip(15).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
-        let odai = raw_pop_like_odai(like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
-        msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
+        let like_odais = msg
+            .content
+            .chars()
+            .skip(15)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let odai = raw_pop_like_odai(
+            like_odais
+                .split("\n")
+                .filter(|line| !line.trim().is_empty())
+                .map(|s| s.to_string()),
+        );
+        msg.channel_id
+            .say(&ctx.http, "# image ".to_string() + &odai)
+            .await?;
     }
     Ok(())
 }
@@ -1798,9 +2095,24 @@ async fn pop_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
 #[description = "お題を出す(not_like)"]
 async fn pop_not_like_odai(ctx: &Context, msg: &Message) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
-        let not_like_odais = msg.content.chars().skip(19).filter(|&c| c != '`').take(2000).collect::<String>().trim().to_string();
-        let odai = raw_pop_not_like_odai(not_like_odais.split("\n").filter(|line| !line.trim().is_empty()).map(|s| s.to_string()));
-        msg.channel_id.say(&ctx.http, "# image ".to_string() + &odai).await?;
+        let not_like_odais = msg
+            .content
+            .chars()
+            .skip(19)
+            .filter(|&c| c != '`')
+            .take(2000)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let odai = raw_pop_not_like_odai(
+            not_like_odais
+                .split("\n")
+                .filter(|line| !line.trim().is_empty())
+                .map(|s| s.to_string()),
+        );
+        msg.channel_id
+            .say(&ctx.http, "# image ".to_string() + &odai)
+            .await?;
     }
     Ok(())
 }
@@ -1848,79 +2160,138 @@ async fn main() {
     }
 }
 
-
 fn raw_push_odai(new_title: String) {
     let conn = establish_connection();
-    let new_odai = NewOdai{title: new_title};
-    diesel::insert_into(odais::table).values(&new_odai).execute(&conn).expect("Error saving new post");
+    let new_odai = NewOdai { title: new_title };
+    diesel::insert_into(odais::table)
+        .values(&new_odai)
+        .execute(&conn)
+        .expect("Error saving new post");
 }
 
-fn raw_pop_odai<T: IntoIterator<Item = String>>(likes: T) -> String{
+fn raw_pop_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
     let conn = establish_connection();
-    let results = likes.into_iter().fold(odais.into_boxed(), |filtered_odais, like| filtered_odais.or_filter(title.like(like))).load::<Odai>(&conn).expect("Error loading posts");
+    let results = likes
+        .into_iter()
+        .fold(odais.into_boxed(), |filtered_odais, like| {
+            filtered_odais.or_filter(title.like(like))
+        })
+        .load::<Odai>(&conn)
+        .expect("Error loading posts");
     let result = results.choose(&mut rand::thread_rng());
     match result {
         Some(o) => {
-            let Odai{id: delete_id, title: delete_title} = o.clone();
-            diesel::delete(odais.filter(id.eq(delete_id))).execute(&conn).expect("error");
+            let Odai {
+                id: delete_id,
+                title: delete_title,
+            } = o.clone();
+            diesel::delete(odais.filter(id.eq(delete_id)))
+                .execute(&conn)
+                .expect("error");
             delete_title
-        },
+        }
         None => return "もうお題がありません".to_string(),
     }
 }
 
 fn raw_all_odai() -> Vec<Odai> {
     let conn = establish_connection();
-    odais.load::<Odai>(&conn).expect("Error loading posts").into_iter().collect()
+    odais
+        .load::<Odai>(&conn)
+        .expect("Error loading posts")
+        .into_iter()
+        .collect()
 }
 
 fn raw_like_odai<T: IntoIterator<Item = String>>(likes: T) -> Vec<Odai> {
     let conn = establish_connection();
-    likes.into_iter().fold(odais.into_boxed(), |filtered_odais, like| filtered_odais.or_filter(title.like(like))).load::<Odai>(&conn).expect("Error loading posts").into_iter().collect()
+    likes
+        .into_iter()
+        .fold(odais.into_boxed(), |filtered_odais, like| {
+            filtered_odais.or_filter(title.like(like))
+        })
+        .load::<Odai>(&conn)
+        .expect("Error loading posts")
+        .into_iter()
+        .collect()
 }
 
 fn raw_not_like_odai<T: IntoIterator<Item = String>>(likes: T) -> Vec<Odai> {
     let conn = establish_connection();
-    likes.into_iter().fold(odais.into_boxed(), |filtered_odais, like| filtered_odais.filter(title.not_like(like))).load::<Odai>(&conn).expect("Error loading posts").into_iter().collect()
+    likes
+        .into_iter()
+        .fold(odais.into_boxed(), |filtered_odais, like| {
+            filtered_odais.filter(title.not_like(like))
+        })
+        .load::<Odai>(&conn)
+        .expect("Error loading posts")
+        .into_iter()
+        .collect()
 }
-
 
 fn raw_delete_odai(delete_id: i32) -> Option<String> {
     let conn = establish_connection();
-    let results = odais.filter(id.eq(delete_id)).load::<Odai>(&conn).expect("Error loading posts");
+    let results = odais
+        .filter(id.eq(delete_id))
+        .load::<Odai>(&conn)
+        .expect("Error loading posts");
     match results.into_iter().next() {
         Some(o) => {
-            diesel::delete(odais.filter(id.eq(delete_id))).execute(&conn).expect("error");
+            diesel::delete(odais.filter(id.eq(delete_id)))
+                .execute(&conn)
+                .expect("error");
             Some(o.title)
         }
-        None => None
+        None => None,
     }
 }
 
 fn raw_pop_like_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
     let conn = establish_connection();
-    let results = likes.into_iter().fold(odais.into_boxed(), |filtered_odais, like| filtered_odais.or_filter(title.like(like))).load::<Odai>(&conn).expect("Error loading posts");
+    let results = likes
+        .into_iter()
+        .fold(odais.into_boxed(), |filtered_odais, like| {
+            filtered_odais.or_filter(title.like(like))
+        })
+        .load::<Odai>(&conn)
+        .expect("Error loading posts");
     let result = results.choose(&mut rand::thread_rng());
     match result {
         Some(o) => {
-            let Odai{id: delete_id, title: delete_title} = o.clone();
-            diesel::delete(odais.filter(id.eq(delete_id))).execute(&conn).expect("error");
+            let Odai {
+                id: delete_id,
+                title: delete_title,
+            } = o.clone();
+            diesel::delete(odais.filter(id.eq(delete_id)))
+                .execute(&conn)
+                .expect("error");
             delete_title
-        },
+        }
         None => return "該当するお題がありません".to_string(),
     }
 }
 
 fn raw_pop_not_like_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
     let conn = establish_connection();
-    let results = likes.into_iter().fold(odais.into_boxed(), |filtered_odais, like| filtered_odais.filter(title.not_like(like))).load::<Odai>(&conn).expect("Error loading posts");
+    let results = likes
+        .into_iter()
+        .fold(odais.into_boxed(), |filtered_odais, like| {
+            filtered_odais.filter(title.not_like(like))
+        })
+        .load::<Odai>(&conn)
+        .expect("Error loading posts");
     let result = results.choose(&mut rand::thread_rng());
     match result {
         Some(o) => {
-            let Odai{id: delete_id, title: delete_title} = o.clone();
-            diesel::delete(odais.filter(id.eq(delete_id))).execute(&conn).expect("error");
+            let Odai {
+                id: delete_id,
+                title: delete_title,
+            } = o.clone();
+            diesel::delete(odais.filter(id.eq(delete_id)))
+                .execute(&conn)
+                .expect("error");
             delete_title
-        },
+        }
         None => return "該当するお題がありません".to_string(),
     }
 }
