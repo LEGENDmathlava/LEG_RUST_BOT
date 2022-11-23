@@ -65,7 +65,7 @@ struct Odai {
 }
 
 #[derive(Insertable)]
-#[table_name = "odais"]
+#[diesel(table_name = odais)]
 struct NewOdai {
     title: String,
 }
