@@ -2,61 +2,58 @@
 extern crate diesel;
 
 use itertools::Itertools;
-use songbird::tracks::TrackError;
-use std::cmp;
-use std::{collections::HashSet, fs::File, io::BufReader, usize};
-
+use rand::{seq::SliceRandom, Rng};
 use std::{
+    cmp,
+    collections::HashSet,
     env,
+    fs::File,
+    io::BufReader,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
+    usize,
 };
+
+use serenity::{
+    async_trait,
+    client::{Client, Context, EventHandler},
+    framework::{
+        standard::{
+            help_commands,
+            macros::{command, group, help},
+            Args, CommandGroup, CommandResult, HelpOptions,
+        },
+        StandardFramework,
+    },
+    http::Http,
+    model::{
+        channel::{GuildChannel, Message},
+        event::TypingStartEvent,
+        gateway::Ready,
+        id::{ChannelId, GuildId, UserId},
+    },
+    prelude::GatewayIntents,
+};
+
+use diesel::{pg::PgConnection, prelude::*};
 
 use songbird::{
-    input::{self, restartable::Restartable},
-    Call, Event, EventContext, EventHandler as VoiceEventHandler, SerenityInit, TrackEvent,
+    input, tracks::TrackError, Event, EventContext, EventHandler as VoiceEventHandler,
+    SerenityInit, TrackEvent,
 };
 
-use serenity::async_trait;
-use serenity::builder::CreateEmbedAuthor;
-use serenity::framework::standard::{
-    help_commands,
-    macros::{command, group, help},
-    Args, CommandError, CommandGroup, CommandResult, HelpOptions,
-};
-use serenity::framework::StandardFramework;
-use serenity::http::Http;
-use serenity::model::{
-    channel::GuildChannel, channel::Message, event::TypingStartEvent, gateway::Ready,
-    id::ChannelId, id::GuildId, id::UserId,
-};
-use serenity::prelude::{Client, Context, EventHandler, Mentionable};
+mod schema;
+use schema::odais::{self, dsl::*};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
 
-use rand::seq::SliceRandom;
-use rand::Rng;
-
-struct Handler;
-
-use diesel::expression::grouped::Grouped;
-use diesel::expression::operators::{And, Or};
-use diesel::expression::{AsExpression, Expression};
-use diesel::pg::PgConnection;
-use diesel::prelude::*;
-use diesel::sql_types::Bool;
-use diesel::BoolExpressionMethods;
 use dotenv::dotenv;
 
-mod schema;
-use schema::odais;
-use schema::odais::dsl::*;
-
-use chrono::{Date, DateTime, Local, Timelike, Utc};
+use chrono::{Local, Timelike};
 
 mod commands;
 use commands::suhjong::*;
@@ -79,6 +76,7 @@ fn establish_connection() -> PgConnection {
     PgConnection::establish(&database_url).expect(&format!("Error connectiong to {}", database_url))
 }
 
+struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn channel_create(&self, ctx: Context, channel: &GuildChannel) {
@@ -117,7 +115,7 @@ impl EventHandler for Handler {
         }
     }
 
-    async fn message(&self, ctx: Context, msg: Message) {}
+    async fn message(&self, _ctx: Context, _msg: Message) {}
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
         if let Err(why) = ChannelId(804573278937153596u64)
@@ -1047,12 +1045,20 @@ struct ChannelDurationNotifier {
 #[async_trait]
 impl VoiceEventHandler for ChannelDurationNotifier {
     async fn act(&self, _ctx: &EventContext<'_>) -> Option<Event> {
-        /*
         let count_before = self.count.fetch_add(1, Ordering::Relaxed);
-        if let Err(why) = self.chan_id.say(&self.http, &format!("I've been in this channel for {} minutes!", count_before + 1)).await {
+        if let Err(why) = self
+            .chan_id
+            .say(
+                &self.http,
+                &format!(
+                    "I've been in this channel for {} minutes!",
+                    count_before + 1
+                ),
+            )
+            .await
+        {
             println!("error!!: {}", why);
         }
-        */
 
         None
     }
@@ -1088,14 +1094,14 @@ impl VoiceEventHandler for SongFader {
 }
 
 struct SongVolumeFader {
-    chan_id: ChannelId,
-    http: Arc<Http>,
+    //chan_id: ChannelId,
+    //http: Arc<Http>,
 }
 
 #[async_trait]
 impl VoiceEventHandler for SongVolumeFader {
     async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
-        if let EventContext::Track(&[(state, track)]) = ctx {
+        if let EventContext::Track(&[(_state, track)]) = ctx {
             let _ = track.set_volume(1.0);
 
             None
@@ -1128,7 +1134,7 @@ impl VoiceEventHandler for SongEndNotifier {
 #[command]
 #[description = "入室"]
 async fn join(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1175,15 +1181,13 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 
     let chan_id = msg.channel_id;
 
-    let send_http = ctx.http.clone();
-
     let mut handle = handle_lock.lock().await;
 
     handle.add_global_event(
         Event::Track(TrackEvent::Play),
         SongVolumeFader {
-            chan_id,
-            http: send_http,
+            //chan_id,
+            //http: send_http,
         },
     );
 
@@ -1204,7 +1208,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[description = "退室"]
 async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1242,7 +1246,7 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[description = "ミュート"]
 async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1288,7 +1292,7 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[description = "ミュート解除"]
 async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1332,7 +1336,7 @@ async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[description = "スピーカーミュート"]
 async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1382,7 +1386,7 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[description = "スピーカーミュート解除"]
 async fn undeafen(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1445,7 +1449,7 @@ async fn play_fade(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
         return Ok(());
     }
 
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1533,7 +1537,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         return Ok(());
     }
 
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1577,7 +1581,6 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     // This handler object will allow you to, as needed,
     // control the audio track via events and further commands.
     let song = handler.play_source(source);
-    let send_http = ctx.http.clone();
     let chan_id = msg.channel_id;
 
     let send_http = ctx.http.clone();
@@ -1612,7 +1615,7 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         return Ok(());
     }
 
-    let guild = match msg.guild(&ctx.cache).await {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1638,7 +1641,7 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         }
     };
 
-    let mut handler = handler_lock.lock().await;
+    let _ = handler_lock.lock().await;
 
     let source = match input::ytdl(&url).await {
         Ok(source) => source,
@@ -1661,7 +1664,6 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     // control the audio track via events and further commands.
     let s: input::Input = source.into();
     println!("{:?}", s.is_seekable());
-    let song = handler.enqueue_source(s);
 
     msg.channel_id
         .say(&ctx.http, "キューに追加しました")
@@ -1672,8 +1674,8 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 #[description = "キュークリア"]
-async fn clear(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+async fn clear(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1699,7 +1701,7 @@ async fn clear(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         }
     };
 
-    let mut handler = handler_lock.lock().await;
+    let handler = handler_lock.lock().await;
 
     let queue = handler.queue();
     let _ = queue.stop();
@@ -1713,8 +1715,8 @@ async fn clear(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 #[description = "スキップ"]
-async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+async fn skip(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1740,7 +1742,7 @@ async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         }
     };
 
-    let mut handler = handler_lock.lock().await;
+    let handler = handler_lock.lock().await;
 
     let queue = handler.queue();
     let _ = queue.skip();
@@ -1754,8 +1756,8 @@ async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 #[description = "停止"]
-async fn stop(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+async fn stop(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1783,7 +1785,7 @@ async fn stop(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     let mut handler = handler_lock.lock().await;
 
-    let queue = handler.stop();
+    handler.stop();
 
     msg.channel_id.say(&ctx.http, "再生を止めました").await?;
 
@@ -1792,8 +1794,8 @@ async fn stop(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 #[description = "インフォメーション"]
-async fn information(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild = match msg.guild(&ctx.cache).await {
+async fn information(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+    let guild = match msg.guild(&ctx.cache) {
         Some(guild) => guild,
         None => {
             msg.reply(&ctx.http, "エラーが発生しました。001").await?;
@@ -1819,7 +1821,7 @@ async fn information(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
         }
     };
 
-    let mut handler = handler_lock.lock().await;
+    let handler = handler_lock.lock().await;
 
     let queue = handler.queue();
     let mut informs = Vec::new();
@@ -1929,7 +1931,7 @@ async fn push(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 #[description = "お題を出す"]
-async fn pop(ctx: &Context, msg: &Message, argsS: Args) -> CommandResult {
+async fn pop(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     if ChannelId(887591543526014996u64) == msg.channel_id {
         let like_odais = msg
             .content
@@ -2147,7 +2149,7 @@ async fn main() {
         .group(&SUHJONG_GROUP);
 
     // Botのクライアントを作成
-    let mut client = Client::builder(&token)
+    let mut client = Client::builder(&token, GatewayIntents::default())
         .event_handler(Handler) // 取得するイベント
         .framework(framework) // コマンドを登録
         .register_songbird()
@@ -2161,22 +2163,22 @@ async fn main() {
 }
 
 fn raw_push_odai(new_title: String) {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     let new_odai = NewOdai { title: new_title };
     diesel::insert_into(odais::table)
         .values(&new_odai)
-        .execute(&conn)
+        .execute(&mut conn)
         .expect("Error saving new post");
 }
 
 fn raw_pop_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     let results = likes
         .into_iter()
         .fold(odais.into_boxed(), |filtered_odais, like| {
             filtered_odais.or_filter(title.like(like))
         })
-        .load::<Odai>(&conn)
+        .load::<Odai>(&mut conn)
         .expect("Error loading posts");
     let result = results.choose(&mut rand::thread_rng());
     match result {
@@ -2186,7 +2188,7 @@ fn raw_pop_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
                 title: delete_title,
             } = o.clone();
             diesel::delete(odais.filter(id.eq(delete_id)))
-                .execute(&conn)
+                .execute(&mut conn)
                 .expect("error");
             delete_title
         }
@@ -2195,50 +2197,50 @@ fn raw_pop_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
 }
 
 fn raw_all_odai() -> Vec<Odai> {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     odais
-        .load::<Odai>(&conn)
+        .load::<Odai>(&mut conn)
         .expect("Error loading posts")
         .into_iter()
         .collect()
 }
 
 fn raw_like_odai<T: IntoIterator<Item = String>>(likes: T) -> Vec<Odai> {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     likes
         .into_iter()
         .fold(odais.into_boxed(), |filtered_odais, like| {
             filtered_odais.or_filter(title.like(like))
         })
-        .load::<Odai>(&conn)
+        .load::<Odai>(&mut conn)
         .expect("Error loading posts")
         .into_iter()
         .collect()
 }
 
 fn raw_not_like_odai<T: IntoIterator<Item = String>>(likes: T) -> Vec<Odai> {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     likes
         .into_iter()
         .fold(odais.into_boxed(), |filtered_odais, like| {
             filtered_odais.filter(title.not_like(like))
         })
-        .load::<Odai>(&conn)
+        .load::<Odai>(&mut conn)
         .expect("Error loading posts")
         .into_iter()
         .collect()
 }
 
 fn raw_delete_odai(delete_id: i32) -> Option<String> {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     let results = odais
         .filter(id.eq(delete_id))
-        .load::<Odai>(&conn)
+        .load::<Odai>(&mut conn)
         .expect("Error loading posts");
     match results.into_iter().next() {
         Some(o) => {
             diesel::delete(odais.filter(id.eq(delete_id)))
-                .execute(&conn)
+                .execute(&mut conn)
                 .expect("error");
             Some(o.title)
         }
@@ -2247,13 +2249,13 @@ fn raw_delete_odai(delete_id: i32) -> Option<String> {
 }
 
 fn raw_pop_like_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     let results = likes
         .into_iter()
         .fold(odais.into_boxed(), |filtered_odais, like| {
             filtered_odais.or_filter(title.like(like))
         })
-        .load::<Odai>(&conn)
+        .load::<Odai>(&mut conn)
         .expect("Error loading posts");
     let result = results.choose(&mut rand::thread_rng());
     match result {
@@ -2263,7 +2265,7 @@ fn raw_pop_like_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
                 title: delete_title,
             } = o.clone();
             diesel::delete(odais.filter(id.eq(delete_id)))
-                .execute(&conn)
+                .execute(&mut conn)
                 .expect("error");
             delete_title
         }
@@ -2272,13 +2274,13 @@ fn raw_pop_like_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
 }
 
 fn raw_pop_not_like_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
-    let conn = establish_connection();
+    let mut conn = establish_connection();
     let results = likes
         .into_iter()
         .fold(odais.into_boxed(), |filtered_odais, like| {
             filtered_odais.filter(title.not_like(like))
         })
-        .load::<Odai>(&conn)
+        .load::<Odai>(&mut conn)
         .expect("Error loading posts");
     let result = results.choose(&mut rand::thread_rng());
     match result {
@@ -2288,7 +2290,7 @@ fn raw_pop_not_like_odai<T: IntoIterator<Item = String>>(likes: T) -> String {
                 title: delete_title,
             } = o.clone();
             diesel::delete(odais.filter(id.eq(delete_id)))
-                .execute(&conn)
+                .execute(&mut conn)
                 .expect("error");
             delete_title
         }

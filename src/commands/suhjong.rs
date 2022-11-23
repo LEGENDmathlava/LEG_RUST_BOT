@@ -1087,7 +1087,7 @@ fn raw_suhjong_miracle(yaku1: String, yaku2: String, kouho: String) -> String {
 >sj SHOUB {河に捨てる} {河から拾う}
 >sj (BOT|BOT2|BOT3|BOT4)
 "]
-async fn sj(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+async fn sj(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     play_suhjong(ctx, msg, args).await
 }
 
